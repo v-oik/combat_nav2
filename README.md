@@ -1,17 +1,7 @@
-# birdro_nav2
+# combat_nav2
 
 
 
-## Getting started
-
-To make it easy for you to get started with GitLab, here's a list of recommended next steps.
-
-Already a pro? Just edit this README.md and make it your own. Want to make it easy? [Use the template at the bottom](#editing-this-readme)!
-
-## Add your files
-
-* [Create](https://docs.gitlab.com/user/project/repository/web_editor/#create-a-file) or [upload](https://docs.gitlab.com/user/project/repository/web_editor/#upload-a-file) files
-* [Add files using the command line](https://docs.gitlab.com/topics/git/add_files/#add-files-to-a-git-repository) or push an existing Git repository with the following command:
 
 ```
 cd existing_repo
@@ -20,9 +10,8 @@ git branch -M main
 git push -uf origin main
 ```
 
-## Integrate with your tools
 
-## 🛠️ Prerequisites & Installation
+## Prerequisites & Installation
 
 `skyautonet_birdro_nav2` 워크스페이스를 빌드하고 자율주행 노드를 구동하기 위해 필요한 ROS 2 Humble 핵심 패키지들을 설치합니다.
 
@@ -33,74 +22,265 @@ sudo apt update && sudo apt install -y \
     ros-humble-navigation2 \
     ros-humble-nav2-bringup \
     ros-humble-nav2-smac-planner \
+    ros-humble-nav2-mppi-controller \ 
     ros-humble-robot-localization \
-    ros-humble-rviz2
+    ros-humble-rviz2\
+    ros-humble-nmea-navsat-driver\
+    ros-humble-nmea-msgs
 ```
 
-## Collaborate with your team
 
-* [Invite team members and collaborators](https://docs.gitlab.com/user/project/members/)
-* [Create a new merge request](https://docs.gitlab.com/user/project/merge_requests/creating_merge_requests/)
-* [Automatically close issues from merge requests](https://docs.gitlab.com/user/project/issues/managing_issues/#closing-issues-automatically)
-* [Enable merge request approvals](https://docs.gitlab.com/user/project/merge_requests/approvals/)
-* [Set auto-merge](https://docs.gitlab.com/user/project/merge_requests/auto_merge/)
 
-## Test and Deploy
 
-Use the built-in continuous integration in GitLab.
 
-* [Get started with GitLab CI/CD](https://docs.gitlab.com/ci/quick_start/)
-* [Analyze your code for known vulnerabilities with Static Application Security Testing (SAST)](https://docs.gitlab.com/user/application_security/sast/)
-* [Deploy to Kubernetes, Amazon EC2, or Amazon ECS using Auto Deploy](https://docs.gitlab.com/topics/autodevops/requirements/)
-* [Use pull-based deployments for improved Kubernetes management](https://docs.gitlab.com/user/clusters/agent/)
-* [Set up protected environments](https://docs.gitlab.com/ci/environments/protected_environments/)
 
-***
+#   RoboSense LiDAR (rslidar) ROS 2 연동 및 데이터 수신 가이드
 
-# Editing this README
+본 문서는 **Ubuntu 22.04** 및 **ROS 2 (Humble)** 환경에서 **RoboSense LiDAR**만을 단독으로 연동하고 데이터를 수집하는 전 과정을 다루는 매뉴얼입니다.
 
-When you're ready to make this README your own, just edit this file and use the handy template below (or feel free to structure it however you want - this is just a starting point!). Thanks to [makeareadme.com](https://www.makeareadme.com/) for this template.
+---
 
-## Suggestions for a good README
+##  1단계: 라이다 유선 네트워크 설정 (고정 IP)
 
-Every project is different, so consider which of these sections apply to yours. The sections used in the template are suggestions for most open source projects. Also keep in mind that while a README can be too long and detailed, too long is better than too short. If you think your README is too long, consider utilizing another form of documentation rather than cutting out information.
+라이다는 기본적으로 `192.168.1.200` IP를 가지며 `192.168.1.xxx` 대역의 PC로 데이터를 전송합니다. 와이파이(인터넷)는 그대로 쓰면서, 라이다가 연결된 랜 포트에 전용 IP를 추가합니다.
 
-## Name
-Choose a self-explaining name for your project.
+```bash
+# 1. 랜 포트 이름 확인 (예: eth0, eno1 등)
+ip a
 
-## Description
-Let people know what your project can do specifically. Provide context and add a link to any reference visitors might be unfamiliar with. A list of Features or a Background subsection can also be added here. If there are alternatives to your project, this is a good place to list differentiating factors.
+# 2. 고정 IP 추가 (기존 IP를 유지하며 라이다용 IP 1.102를 추가함)
+# ※ 'eth0' 부분은 ip a 에서 확인한 본인의 포트 이름으로 수정하세요.
+sudo ip addr add 192.168.1.102/24 dev eth0
+sudo ip link set eth0 up
 
-## Badges
-On some READMEs, you may see small images that convey metadata, such as whether or not all the tests are passing for the project. You can use Shields to add some to your README. Many services also have instructions for adding a badge.
+# 3. 통신 확인 (64 bytes from... 응답이 오면 성공)
+ping 192.168.1.200
+```
 
-## Visuals
-Depending on what you are making, it can be a good idea to include screenshots or even a video (you'll frequently see GIFs rather than actual videos). Tools like ttygif can help, but check out Asciinema for a more sophisticated method.
+---
 
-## Installation
-Within a particular ecosystem, there may be a common way of installing things, such as using Yarn, NuGet, or Homebrew. However, consider the possibility that whoever is reading your README is a novice and would like more guidance. Listing specific steps helps remove ambiguity and gets people to using your project as quickly as possible. If it only runs in a specific context like a particular programming language version or operating system or has dependencies that have to be installed manually, also add a Requirements subsection.
+##  2단계: 드라이버 다운로드 및 의존성 설치
 
-## Usage
-Use examples liberally, and show the expected output if you can. It's helpful to have inline the smallest example of usage that you can demonstrate, while providing links to more sophisticated examples if they are too long to reasonably include in the README.
+ROS 2 워크스페이스(`~/ros2_ws`)에서 진행합니다.
 
-## Support
-Tell people where they can go to for help. It can be any combination of an issue tracker, a chat room, an email address, etc.
+### 2.1 시스템 의존성 설치 (필수)
+네트워크 패킷 캡처 및 설정 파일 파싱을 위한 시스템 라이브러리를 설치합니다.
+```bash
+sudo apt update
+sudo apt install -y libpcap-dev libyaml-cpp-dev
+```
 
-## Roadmap
-If you have ideas for releases in the future, it is a good idea to list them in the README.
+### 2.2 소스코드 다운로드 및 서브모듈 초기화
+```bash
+cd ~/ros2_ws/src
 
-## Contributing
-State if you are open to contributions and what your requirements are for accepting them.
+# 1. LiDAR 메시지 및 SDK 클론
+git clone https://github.com/RoboSense-LiDAR/rslidar_msg.git
+git clone https://github.com/RoboSense-LiDAR/rslidar_sdk.git
 
-For people who want to make changes to your project, it's helpful to have some documentation on how to get started. Perhaps there is a script that they should run or some environment variables that they need to set. Make these steps explicit. These instructions could also be useful to your future self.
+# 2. LiDAR SDK 내부 핵심 드라이버(서브모듈) 가져오기
+cd rslidar_sdk
+git submodule init
+git submodule update
+```
 
-You can also document commands to lint the code or run tests. These steps help to ensure high code quality and reduce the likelihood that the changes inadvertently break something. Having instructions for running tests is especially helpful if it requires external setup, such as starting a Selenium server for testing in a browser.
+---
 
-## Authors and acknowledgment
-Show your appreciation to those who have contributed to the project.
+## ⚙️ 3단계: LiDAR 소스코드 및 설정 파일 세부 수정
 
-## License
-For open source projects, say how it is licensed.
+`rslidar_sdk`는 ROS 1/2 공용이므로 ROS 2에 맞게 설정을 변경해야 합니다.
 
-## Project status
-If you have run out of energy or time for your project, put a note at the top of the README saying that development has slowed down or stopped completely. Someone may choose to fork your project or volunteer to step in as a maintainer or owner, allowing your project to keep going. You can also make an explicit request for maintainers.
+### 3.1 빌드 방식 변경 (ROS 2 전용)
+```bash
+cd ~/ros2_ws/src/rslidar_sdk
+cp package_ros2.xml package.xml
+
+# CMakeLists.txt의 빌드 옵션을 ORIGINAL에서 COLCON으로 변경
+sed -i 's/set(COMPILE_METHOD ORIGINAL)/set(COMPILE_METHOD COLCON)/g' CMakeLists.txt
+```
+
+### 3.2 LiDAR 설정 파일 (`config.yaml`) 수정
+`nano ~/ros2_ws/src/rslidar_sdk/config/config.yaml` 명령으로 파일을 열어 아래 **3가지 핵심 파라미터**를 반드시 확인하고 수정합니다.
+
+```yaml
+common:
+  msg_source: 1                  # 1: 실 실시간 센서 수신 (필수)
+  send_packet_ros: false
+  send_point_cloud_ros: true     # ROS PointCloud2 토픽 발행 (필수)
+
+lidar:
+  - driver:
+      lidar_type: RSE1           # [중요] 사용 중인 모델명 (예: RSE1, RSM1 등. 틀리면 MSOP 에러 발생)
+      msop_port: 6699
+      difop_port: 7788
+      host_address: 0.0.0.0      # 전체 수신 허용
+```
+
+### 3.3 Headless 실행 설정 (SSH 환경 RViz2 에러 방지)
+SSH 원격 접속 시 디스플레이(GUI)가 없어 RViz2 렌더링 에러로 드라이버가 종료되는 것을 막기 위해 런치 파일을 수정합니다.
+`nano ~/ros2_ws/src/rslidar_sdk/launch/start.py`
+
+* 파일 하단 `return LaunchDescription([...])` 내부의 **`rviz2` 관련 `Node` 부분을 삭제하거나 주석 처리**합니다.
+
+```python
+    return LaunchDescription([
+        Node(
+            namespace='rslidar_sdk',
+            package='rslidar_sdk',
+            executable='rslidar_sdk_node',
+            output='screen'
+        )
+        # --- 아래 부분은 삭제 또는 주석 처리 ---
+        # , Node(
+        #     namespace='rviz2',
+        #     ...
+        # )
+    ])
+```
+
+---
+
+##  4단계: 컴파일 및 개별 드라이버 실행
+
+### 4.1 워크스페이스 빌드
+```bash
+cd ~/ros2_ws
+colcon build --symlink-install --packages-select rslidar_msg rslidar_sdk
+source install/setup.bash
+```
+
+### 4.2 센서 가동
+드라이버를 실행하여 라이다 패킷 수신을 시작합니다.
+```bash
+ros2 launch rslidar_sdk start.py
+```
+
+---
+
+## 📼 5단계: 센서 데이터 검증 및 녹화 (Rosbag)
+
+라이다가 정상적으로 토픽을 발행하는지 확인 후, Bag 파일로 저장합니다. 새로운 터미널을 열고 진행합니다.
+
+```bash
+source ~/ros2_ws/install/setup.bash
+
+# 데이터 수신 상태 확인 (E1 모델 기준 약 10Hz가 정상)
+ros2 topic hz /rslidar_points
+
+# 정상 확인 후 녹화 시작
+cd ~/ros2_ws
+ros2 bag record -o rslidar_dataset /rslidar_points
+
+# 녹화 종료: Ctrl + C
+# 저장 검증: ros2 bag info rslidar_dataset
+```
+
+---
+
+## 🖥️ 6단계: PC 시각화 및 재생 트러블슈팅
+
+저장된 Bag 파일을 윈도우/맥/리눅스 메인 PC로 옮겨서 재생할 때의 필수 설정입니다.
+
+### 6.1 시간 동기화 옵션 재생
+과거의 데이터를 현재 시스템 시간으로 재생해야 시스템이 데이터를 버리지 않습니다.
+```bash
+ros2 bag play rslidar_dataset --clock -l
+```
+
+### 6.2 RViz2 필수 세팅 (데이터가 안 보일 때)
+RViz2를 켜고 `PointCloud2` 토픽(`/rslidar_points`)을 추가한 뒤, 아래 두 곳을 무조건 수정해야 점군이 나타납니다.
+
+1. **Fixed Frame 변경:** 왼쪽 `Global Options > Fixed Frame`의 `map`을 지우고 **`rslidar`** 로 직접 타이핑하여 입력합니다.
+2. **QoS 변경 [매우 중요]:** 추가한 `PointCloud2` 세부 메뉴에서 `Topic > QoS > Reliability Policy`를 `Reliable`에서 **`Best Effort`** 로 변경합니다.
+
+
+#  [Master Guide] Xsens MTi IMU (bluespace-ai) ROS 2 연동 및 데이터 수신 가이드
+
+본 문서는 **Ubuntu 20.04/22.04** 및 **ROS 2 (Foxy/Humble)** 환경에서 **bluespace-ai 버전의 Xsens MTi 시리즈 IMU**를 연동하고 `/imu/data` 토픽을 생성하는 전 과정을 다룹니다.
+
+---
+
+## 🛠️ 1단계: 하드웨어 연결 및 시리얼 권한 설정
+
+IMU는 USB-to-Serial 방식으로 연결되므로, 리눅스 시스템에서 해당 USB 포트에 접근할 수 있는 권한을 먼저 설정해야 합니다.
+
+```bash
+# 1. IMU가 연결된 USB 포트 이름 확인 (일반적으로 /dev/ttyUSB0 로 잡힙니다)
+ls -l /dev/ttyUSB*
+
+# 2. 시리얼 권한 영구 부여 (사용자를 dialout 그룹에 추가, 재부팅 후 적용)
+sudo usermod -aG dialout $USER
+
+# 3. 즉시 권한 부여 (지금 바로 테스트하고 싶을 때)
+sudo chmod 777 /dev/ttyUSB0
+```
+
+---
+
+## 📥 2단계: 드라이버 다운로드 (bluespace-ai 버전)
+
+기존에 성공적으로 사용하셨던 `bluespace-ai` 레포지토리를 워크스페이스에 클론합니다.
+
+```bash
+cd ~/ros2_ws/src
+git clone [https://github.com/bluespace-ai/bluespace_ai_xsens_ros_mti_driver.git](https://github.com/bluespace-ai/bluespace_ai_xsens_ros_mti_driver.git)
+```
+
+---
+
+## ⚙️ 3단계: 핵심 파라미터 설정 (포트 및 통신 속도)
+
+장비가 연결된 포트와 통신 속도(Baudrate)가 드라이버 설정과 일치해야 정상적으로 데이터를 읽어올 수 있습니다.
+
+`nano ~/ros2_ws/src/bluespace_ai_xsens_ros_mti_driver/param/xsens_mti_node.yaml` 명령으로 파일을 열어 아래 부분을 확인하고 수정합니다.
+
+```yaml
+xsens_mti_node:
+  ros__parameters:
+    # 1.1에서 확인한 포트 이름으로 정확히 기입
+    port: "/dev/ttyUSB0"
+    
+    # 통신 속도 (장비 세팅에 따라 115200 또는 921600 입력)
+    baudrate: 921600
+    
+    frame_id: "imu_link"
+```
+*(수정 후 저장: `Ctrl+O` → `Enter` → `Ctrl+X`)*
+
+---
+
+## 🔨 4단계: 워크스페이스 빌드 및 드라이버 가동
+
+### 4.1 패키지 단독 빌드
+레포지토리 이름(`bluespace_ai_xsens_ros_mti_driver`)과 실제 빌드되는 패키지 이름(`bluespace_ai_xsens_mti_driver`)이 살짝 다르니 아래 명령어를 그대로 복사해서 사용하세요.
+
+```bash
+cd ~/ros2_ws
+colcon build --symlink-install --packages-select bluespace_ai_xsens_mti_driver
+source install/setup.bash
+```
+
+### 4.2 드라이버 실행
+```bash
+ros2 launch bluespace_ai_xsens_mti_driver xsens_mti_node.launch.py
+```
+
+---
+
+## 📼 5단계: 토픽 수신 확인 및 데이터 녹화 (Rosbag)
+
+드라이버가 켜진 상태에서 새로운 터미널을 열고 데이터가 정상적으로 쏟아지는지 검증합니다.
+
+```bash
+source ~/ros2_ws/install/setup.bash
+
+# 1. 토픽 수신 주기 확인 (MTi 모델에 따라 보통 100Hz로 들어옵니다)
+ros2 topic hz /imu/data
+
+# 2. 실제 방향/가속도 데이터 눈으로 직접 확인해보기
+ros2 topic echo /imu/data
+
+# 3. 100Hz로 깔끔하게 들어온다면 녹화 시작!
+cd ~/ros2_ws
+ros2 bag record -o imu_dataset /imu/data
+```
