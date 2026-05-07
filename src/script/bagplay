@@ -1,0 +1,1 @@
+ros2 bag play orin_bag/ --clock --remap /rslidar_points:=/rslidar_points_raw /fix:=/sensing/gnss/nav_sat_fix_raw /imu/data:=/sensing/imu/imu_data_raw

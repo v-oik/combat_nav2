@@ -1,0 +1,5 @@
+ros2 launch bird_nav2 sensor.launch.py 
+ros2 launch bird_nav2 bag_nav_test.launch.py
+ros2 run tf2_ros static_transform_publisher 0 0 0 0 0 0 odom base_footprint
+ros2 run tf2_ros static_transform_publisher 0 0 0 0 0 0 map odom
+ros2 action send_goal /navigate_to_pose nav2_msgs/action/NavigateToPose "{pose: {header: {frame_id: 'base_footprint'}, pose: {position: {x: 2.0, y: 0.0, z: 0.0}, orientation: {x: 0.0, y: 0.0, z: 0.0, w: 1.0}}}}"

@@ -11,6 +11,15 @@ def generate_launch_description():
 
     use_sim_time = LaunchConfiguration('use_sim_time')
 
+    # GPS 센서 이름표 보정 (이 파일에서만 실행)
+    tf_gnss_fix = Node(
+        package='tf2_ros',
+        executable='static_transform_publisher',
+        arguments=['0', '0', '0', '0', '0', '0', 'gnss_base_link', 'gps'],
+        output='screen',
+        parameters=[{'use_sim_time': use_sim_time}]
+    )
+
     ekf_local_node = Node(
         package='robot_localization',
         executable='ekf_node',
@@ -35,14 +44,14 @@ def generate_launch_description():
         name='navsat_transform',
         output='screen',
         parameters=[ekf_config_file, {'use_sim_time': use_sim_time}],
-        remappings=[('imu', '/sensing/imu/imu_data'),
-                    ('gps/fix', '/sensing/gnss/nav_sat_fix'),
-                    # 🔥 해결: local이 아니라 global 데이터를 먹여서 map 프레임과 일치시킵니다!
+        remappings=[('imu', '/imu/data'),        # 🔥 수정: 원본 IMU 토픽
+                    ('gps/fix', '/fix'),         # 🔥 수정: 원본 GPS 토픽
                     ('odometry/filtered', 'odometry/global')]
     )
 
     return LaunchDescription([
-        DeclareLaunchArgument('use_sim_time', default_value='true'),
+        DeclareLaunchArgument('use_sim_time', default_value='false'),
+        tf_gnss_fix,
         ekf_local_node,
         ekf_global_node,
         navsat_transform_node

@@ -9,7 +9,7 @@ def generate_launch_description():
     pkg_dir = get_package_share_directory('combat_robot_nav2')
     nav2_bringup_dir = get_package_share_directory('nav2_bringup')
     
-    use_sim_time = LaunchConfiguration('use_sim_time', default='true')
+    use_sim_time = LaunchConfiguration('use_sim_time', default='false')
     param_file = os.path.join(pkg_dir, 'config', 'nav2_params.yaml')
 
     navigation_launch = IncludeLaunchDescription(
@@ -24,6 +24,6 @@ def generate_launch_description():
     )
 
     return LaunchDescription([
-        DeclareLaunchArgument('use_sim_time', default_value='true'),
+        DeclareLaunchArgument('use_sim_time', default_value='false'),
         navigation_launch
     ])

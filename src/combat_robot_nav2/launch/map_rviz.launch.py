@@ -17,7 +17,7 @@ def generate_launch_description():
         executable='map_server',
         name='map_server',
         output='screen',
-        parameters=[{'yaml_filename': map_file}, {'use_sim_time': True}] # 🚀 수정
+        parameters=[{'yaml_filename': map_file}, {'use_sim_time': False}] # 🚀 수정
     )
 
     lifecycle_manager_node = Node(
@@ -25,7 +25,7 @@ def generate_launch_description():
         executable='lifecycle_manager',
         name='lifecycle_manager_mapper',
         output='screen',
-        parameters=[{'use_sim_time': True}, # 🚀 수정
+        parameters=[{'use_sim_time': False}, # 🚀 수정
                     {'autostart': True},
                     {'node_names': ['map_server']}]
     )
@@ -35,7 +35,7 @@ def generate_launch_description():
         executable='rviz2',
         name='rviz2',
         arguments=['-d', rviz_config_dir], # 🚀 수정: Nav2 패널 자동 열림
-        parameters=[{'use_sim_time': True}], # 🚀 수정
+        parameters=[{'use_sim_time': False}], # 🚀 수정
         output='screen'
     )
 

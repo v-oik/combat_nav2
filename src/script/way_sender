@@ -1,0 +1,1 @@
+ros2 topic pub --once /mission_input combat_robot_msgs/msg/WaypointList "{ mode: 5, mission_id: 1045, mission_status: 0, waypoints: [ {way_id: 1, way_lat: 36.61004037725487, way_lon: 127.28775488888138, way_status: 0}, {way_id: 2, way_lat: 36.61008824920741, way_lon: 127.28779238883851, way_status: 0}] }"
