@@ -1,0 +1,41 @@
+<?xml version="1.0"?>
+<robot xmlns:xacro="http://www.ros.org/wiki/xacro">
+    <!-- Macro for inertia of a box -->
+    <xacro:macro name="box_inertia" params="m x y z">
+        <inertia ixx="${m*(y*y+z*z)/12}" ixy="0" ixz="0"
+            iyy="${m*(x*x+z*z)/12}" iyz="0"
+            izz="${m*(x*x+y*y)/12}" />
+    </xacro:macro>
+
+    <!-- Macro for inertia of a cylinder -->
+    <xacro:macro name="cylinder_inertia" params="m r l">
+        <inertia ixx="${m*(3*r*r+l*l)/12}" ixy="0" ixz="0"
+            iyy="${m*(3*r*r+l*l)/12}" iyz="0"
+            izz="${m*r*r/2}" />
+    </xacro:macro>
+
+    <!-- Macro for hidden wheel -->
+    <xacro:macro name="hidden_wheel" params="name x_pos y_pos z_pos">
+        <link name="${name}">
+            <collision>
+                <origin xyz="0 0 0" rpy="${pi/2} 0 0" />
+                <geometry>
+                    <cylinder radius="${wheel_radius}" length="${wheel_width}" />
+                </geometry>
+            </collision>
+            <inertial>
+                <origin xyz="0 0 0" rpy="0 0 0" />
+                <mass value="${wheel_mass}" />
+                <xacro:cylinder_inertia m="${wheel_mass}" r="${wheel_radius}" l="${wheel_width}" />
+            </inertial>
+        </link>
+
+        <joint name="${name}_joint" type="continuous">
+            <parent link="base_link" />
+            <child link="${name}" />
+            <origin xyz="${x_pos} ${y_pos} ${z_pos}" rpy="0 0 0" />
+            <axis xyz="0 1 0" />
+        </joint>
+    </xacro:macro>
+
+</robot>

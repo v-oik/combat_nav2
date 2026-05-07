@@ -1,0 +1,142 @@
+<?xml version="1.0"?>
+<robot xmlns:xacro="http://www.ros.org/wiki/xacro" name="chassis_cameras">
+
+    <!-- Chassis camera properties -->
+    <xacro:property name="chassis_cam_mass" value="0.05" />
+    <xacro:property name="chassis_cam_fps" value="10" />
+    <xacro:property name="chassis_length" value="1.314" />
+    <xacro:property name="chassis_height" value="0.606" />
+
+    <!-- Namespace configuration for multi-robot support -->
+    <xacro:arg name="robot_ns" default="" />
+    <xacro:property name="ns" value="$(arg robot_ns)" />
+    <xacro:property name="topic_prefix" value="${'/' + ns if ns != '' else ''}" />
+    <xacro:property name="frame_prefix" value="${ns + '/' if ns != '' else ''}" />
+
+
+    <!-- ==================== FRONT CAMERA (Visual SLAM / Navigation) ==================== -->
+
+    <link name="front_camera_link">
+        <visual>
+            <origin xyz="0 0 0" rpy="0 0 0" />
+            <geometry>
+                <mesh filename="package://combat_robot_description/meshes/camera.dae" />
+            </geometry>
+             <material name="dark_gray" />
+        </visual>
+        <collision>
+            <geometry>
+                <box size="0.055 0.064 0.123" />
+            </geometry>
+        </collision>
+        <inertial>
+            <mass value="${chassis_cam_mass}" />
+            <inertia ixx="0.0001" ixy="0" ixz="0" iyy="0.0001" iyz="0" izz="0.0001" />
+        </inertial>
+    </link>
+
+    <joint name="front_camera_joint" type="fixed">
+        <parent link="base_link" />
+        <child link="front_camera_link" />
+         <origin xyz="0.47 0 0.16" rpy="0 0 0" />
+    </joint>
+
+    <!-- Front camera optical frame -->
+    <link name="front_camera_optical_frame" />
+    <joint name="front_camera_optical_joint" type="fixed">
+        <parent link="front_camera_link" />
+        <child link="front_camera_optical_frame" />
+        <origin xyz="0 0 0" rpy="${-pi/2} 0 ${-pi/2}" />
+    </joint>
+
+    <!-- Front camera sensor (120° FOV) -->
+    <gazebo reference="front_camera_link">
+        <sensor name="front_camera" type="camera">
+            <always_on>true</always_on>
+            <update_rate>${chassis_cam_fps}</update_rate>
+            <topic>${topic_prefix}/front_camera/image_raw</topic>
+            <gz_frame_id>${frame_prefix}front_camera_link</gz_frame_id>
+            <camera>
+                <horizontal_fov>2.094</horizontal_fov>
+                <image>
+                    <width>640</width>
+                    <height>480</height>
+                    <format>R8G8B8</format>
+                </image>
+                <clip>
+                    <near>0.1</near>
+                    <far>100</far>
+                </clip>
+                <noise>
+                    <type>gaussian</type>
+                    <mean>0.0</mean>
+                    <stddev>0.007</stddev>
+                </noise>
+            </camera>
+        </sensor>
+    </gazebo>
+
+
+    <!-- ==================== REAR CAMERA (Visual SLAM / Navigation) ==================== -->
+
+    <link name="rear_camera_link">
+        <visual>
+            <origin xyz="0 0 0" rpy="0 0 0" />
+            <geometry>
+                <mesh filename="package://combat_robot_description/meshes/camera.dae" />
+            </geometry>
+             <material name="dark_gray" />
+        </visual>
+        <collision>
+            <geometry>
+                <box size="0.055 0.064 0.123" />
+            </geometry>
+        </collision>
+        <inertial>
+            <mass value="${chassis_cam_mass}" />
+            <inertia ixx="0.0001" ixy="0" ixz="0" iyy="0.0001" iyz="0" izz="0.0001" />
+        </inertial>
+    </link>
+
+    <joint name="rear_camera_joint" type="fixed">
+        <parent link="base_link" />
+        <child link="rear_camera_link" />
+          <origin xyz="-0.5 0 0.16" rpy="0 0 3.14159" />
+    </joint>
+
+    <!-- Rear camera optical frame -->
+    <link name="rear_camera_optical_frame" />
+    <joint name="rear_camera_optical_joint" type="fixed">
+        <parent link="rear_camera_link" />
+        <child link="rear_camera_optical_frame" />
+        <origin xyz="0 0 0" rpy="${-pi/2} 0 ${-pi/2}" />
+    </joint>
+
+    <!-- Rear camera sensor (120° FOV) -->
+    <gazebo reference="rear_camera_link">
+        <sensor name="rear_camera" type="camera">
+            <always_on>true</always_on>
+            <update_rate>${chassis_cam_fps}</update_rate>
+            <topic>${topic_prefix}/rear_camera/image_raw</topic>
+            <gz_frame_id>${frame_prefix}rear_camera_link</gz_frame_id>
+            <camera>
+                <horizontal_fov>2.094</horizontal_fov>
+                <image>
+                    <width>640</width>
+                    <height>480</height>
+                    <format>R8G8B8</format>
+                </image>
+                <clip>
+                    <near>0.1</near>
+                    <far>100</far>
+                </clip>
+                <noise>
+                    <type>gaussian</type>
+                    <mean>0.0</mean>
+                    <stddev>0.007</stddev>
+                </noise>
+            </camera>
+        </sensor>
+    </gazebo>
+
+</robot>

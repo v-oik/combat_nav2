@@ -1,0 +1,138 @@
+<?xml version="1.0"?>
+<robot xmlns:xacro="http://www.ros.org/wiki/xacro" name="camera_holder">
+    <!-- Camera holder dimensions(meters) -->
+    <xacro:property name="camera_holder_x" value="0.287" />
+    <xacro:property name="camera_holder_y" value="0.295" />
+    <xacro:property name="camera_holder_z" value="0.130" />
+    <xacro:property name="camera_holder_mass" value="0.3" />
+    <!-- Camera update rate: 30 (full fidelity) or 10 (optimized multi-robot) -->
+    <xacro:property name="camera_fps" value="10" />
+    <!-- Namespace configuration for multi-robot support -->
+    <xacro:arg name="robot_ns" default="" />
+    <xacro:property name="ns" value="$(arg robot_ns)" />
+    <xacro:property name="topic_prefix" value="${'/' + ns if ns != '' else ''}" />
+    <xacro:property name="frame_prefix" value="${ns + '/' if ns != '' else ''}" />
+
+
+    <!--  CAMERA HOLDER LINK  -->
+    <link name="camera_holder_link">
+        <visual>
+            <origin xyz="0 0 0" rpy="0 0 0" />
+            <geometry>
+                <mesh filename="package://combat_robot_description/meshes/camera_holder.dae" />
+            </geometry>
+        </visual>
+        <collision>
+            <geometry>
+                <box size="${camera_holder_x} ${camera_holder_y} ${camera_holder_z}" />
+            </geometry>
+        </collision>
+        <inertial>
+            <mass value="${camera_holder_mass}" />
+            <xacro:box_inertia m="${camera_holder_mass}" x="${camera_holder_x}"
+                y="${camera_holder_y}" z="${camera_holder_z}" />
+        </inertial>
+    </link>
+
+    <joint name="camera_holder_joint" type="fixed">
+        <parent link="gimbal_tilt_link" />
+        <child link="camera_holder_link" />
+        <origin xyz="0 0.004 0.171" rpy="0 0 0" />
+    </joint>
+
+    <!-- RGB CAMERA LINK (sensor only) -->
+    <link name="rgb_camera_link">
+        <inertial>
+            <mass value="0.01" />
+            <inertia ixx="0.0001" ixy="0" ixz="0" iyy="0.0001" iyz="0" izz="0.0001" />
+        </inertial>
+    </link>
+
+    <joint name="rgb_camera_joint" type="fixed">
+        <parent link="camera_holder_link" />
+        <child link="rgb_camera_link" />
+        <!-- Update with actual RGB lens position from FreeCAD -->
+        <origin xyz="0.14 -0.05 0" rpy="0 0 0" />
+    </joint>
+
+    <!-- IR CAMERA LINK (sensor only)  -->
+    <link name="ir_camera_link">
+        <inertial>
+            <mass value="0.01" />
+            <inertia ixx="0.0001" ixy="0" ixz="0" iyy="0.0001" iyz="0" izz="0.0001" />
+        </inertial>
+    </link>
+
+    <joint name="ir_camera_joint" type="fixed">
+        <parent link="camera_holder_link" />
+        <child link="ir_camera_link" />
+        <!---Update
+        with actual IR lens position from FreeCAD -->
+        <origin xyz="0.14 0.05 0" rpy="0 0 0" />
+    </joint>
+
+    <!--  RGB CAMERA OPTICAL FRAME  -->
+    <link name="rgb_camera_optical_frame" />
+    <joint name="rgb_camera_optical_joint" type="fixed">
+        <parent link="rgb_camera_link" />
+        <child link="rgb_camera_optical_frame" />
+        <origin xyz="0 0 0" rpy="${-pi/2} 0 ${-pi/2}" />
+    </joint>
+
+    <!--  IR CAMERA OPTICAL FRAME  -->
+    <link name="ir_camera_optical_frame" />
+    <joint name="ir_camera_optical_joint" type="fixed">
+        <parent link="ir_camera_link" />
+        <child link="ir_camera_optical_frame" />
+        <origin xyz="0 0 0" rpy="${-pi/2} 0 ${-pi/2}" />
+    </joint>
+
+
+    <!-- RGB CAMERA SENSOR -->
+    <gazebo reference="rgb_camera_link">
+        <sensor name="rgb_camera" type="camera">
+            <always_on>true</always_on>
+            <update_rate>${camera_fps}</update_rate>
+            <topic>${topic_prefix}/rgb_camera/image_raw</topic>
+            <gz_frame_id>${frame_prefix}rgb_camera_link</gz_frame_id>
+            <camera>
+                <horizontal_fov>1.047</horizontal_fov>
+                <image>
+                    <width>640</width>
+                    <height>480</height>
+                    <format>R8G8B8</format>
+                </image>
+                <clip>
+                    <near>0.1</near>
+                    <far>100</far>
+                </clip>
+                <noise>
+                    <type>gaussian</type>
+                    <mean>0.0</mean>
+                    <stddev>0.007</stddev>
+                </noise>
+            </camera>
+        </sensor>
+    </gazebo>
+    <!-- IR CAMERA SENSOR -->
+    <gazebo reference="ir_camera_link">
+        <sensor name="ir_camera" type="camera">
+            <always_on>true</always_on>
+            <update_rate>${camera_fps}</update_rate>
+            <topic>${topic_prefix}/ir_camera/image_raw</topic>
+            <gz_frame_id>${frame_prefix}ir_camera_link</gz_frame_id>
+            <camera>
+                <horizontal_fov>1.047</horizontal_fov>
+                <image>
+                    <width>640</width>
+                    <height>480</height>
+                    <format>L8</format>
+                </image>
+                <clip>
+                    <near>0.1</near>
+                    <far>100</far>
+                </clip>
+            </camera>
+        </sensor>
+    </gazebo>
+</robot>

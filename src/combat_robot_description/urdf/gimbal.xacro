@@ -1,0 +1,125 @@
+<?xml version="1.0"?>
+<robot xmlns:xacro="http://www.ros.org/wiki/xacro" name="gimbal">
+
+  <!-- Gimbal Base dimensions(meters) -->
+  <xacro:property name="gimbal_base_x" value="0.155" />
+  <xacro:property name="gimbal_base_y" value="0.155" />
+  <xacro:property name="gimbal_base_z" value="0.073" />
+  <xacro:property name="gimbal_base_mass" value="0.5" />
+
+  <!-- Gimbal Pan dimensions(meters) -->
+  <xacro:property name="gimbal_pan_x" value="0.180" />
+  <xacro:property name="gimbal_pan_y" value="0.172" />
+  <xacro:property name="gimbal_pan_z" value="0.194" />
+  <xacro:property name="gimbal_pan_mass" value="0.8" />
+
+  <!-- Gimbal Tilt dimensions(meters) -->
+  <xacro:property name="gimbal_tilt_x" value="0.125" />
+  <xacro:property name="gimbal_tilt_y" value="0.256" />
+  <xacro:property name="gimbal_tilt_z" value="0.219" />
+  <xacro:property name="gimbal_tilt_mass" value="0.5" />
+
+  <!-- Joint offsets(meters) -->
+  <xacro:property name="pan_joint_z" value="0.133" />
+  <xacro:property name="tilt_joint_z" value="0.028" />
+
+  <!-- Gimbal Damping and Friction -->
+  <xacro:property name="gimbal_damping" value="5" />
+  <xacro:property name="gimbal_friction" value="0.1" />
+
+  <!-- Pan joint limits -->
+  <xacro:property name="pan_lower" value="${-pi}" />
+  <xacro:property name="pan_upper" value="${pi}" />
+  <xacro:property name="pan_effort" value="10" />
+  <xacro:property name="pan_velocity" value="1.0" />
+
+  <!-- Tilt joint limits -->
+  <xacro:property name="tilt_lower" value="${-pi/4}" />
+  <xacro:property name="tilt_upper" value="${pi/4}" />
+  <xacro:property name="tilt_effort" value="10" />
+  <xacro:property name="tilt_velocity" value="1.0" />
+
+  <!-- ============ BASE ============ -->
+  <link name="gimbal_base_link">
+    <visual>
+      <origin xyz="0 0 0" rpy="0 0 0" />
+      <geometry>
+        <mesh filename="package://combat_robot_description/meshes/gimbal_base.dae" />
+      </geometry>
+    </visual>
+    <collision>
+      <geometry>
+        <box size="${gimbal_base_x} ${gimbal_base_y} ${gimbal_base_z}" />
+      </geometry>
+    </collision>
+    <inertial>
+      <mass value="${gimbal_base_mass}" />
+      <xacro:box_inertia m="${gimbal_base_mass}" x="${gimbal_base_x}" y="${gimbal_base_y}"
+        z="${gimbal_base_z}" />
+    </inertial>
+  </link>
+
+  <!-- ============ PAN ============ -->
+  <link name="gimbal_pan_link">
+    <visual>
+      <origin xyz="0 0 0" rpy="0 0 0" />
+      <geometry>
+        <mesh filename="package://combat_robot_description/meshes/gimbal_pan.dae" />
+      </geometry>
+    </visual>
+    <collision>
+      <geometry>
+        <box size="${gimbal_pan_x} ${gimbal_pan_y} ${gimbal_pan_z}" />
+      </geometry>
+    </collision>
+    <inertial>
+      <mass value="${gimbal_pan_mass}" />
+      <xacro:box_inertia m="${gimbal_pan_mass}" x="${gimbal_pan_x}" y="${gimbal_pan_y}"
+        z="${gimbal_pan_z}" />
+    </inertial>
+  </link>
+
+  <joint name="gimbal_pan_joint" type="revolute">
+    <parent link="gimbal_base_link" />
+    <child link="gimbal_pan_link" />
+    <origin xyz="0 0 ${pan_joint_z}" rpy="0 0 0" />
+    <axis xyz="0 0 1" />
+    <limit lower="${pan_lower}" upper="${pan_upper}" effort="${pan_effort}" velocity="${pan_velocity}" />
+    <dynamics damping="${gimbal_damping}" friction="${gimbal_friction}" />
+  </joint>
+
+  <!-- ============ TILT ============ -->
+  <link name="gimbal_tilt_link">
+    <visual>
+      <origin xyz="0 0 0" rpy="0 0 0" />
+      <geometry>
+        <mesh filename="package://combat_robot_description/meshes/gimbal_tilt.dae" />
+      </geometry>
+    </visual>
+    <collision>
+      <geometry>
+        <box size="${gimbal_tilt_x} ${gimbal_tilt_y} ${gimbal_tilt_z}" />
+      </geometry>
+    </collision>
+    <inertial>
+      <mass value="${gimbal_tilt_mass}" />
+      <xacro:box_inertia m="${gimbal_tilt_mass}" x="${gimbal_tilt_x}" y="${gimbal_tilt_y}"
+        z="${gimbal_tilt_z}" />
+    </inertial>
+  </link>
+
+  <joint name="gimbal_tilt_joint" type="revolute">
+    <parent link="gimbal_pan_link" />
+    <child link="gimbal_tilt_link" />
+    <origin xyz="0 0 ${tilt_joint_z}" rpy="0 0 0" />
+    <axis xyz="0 1 0" />
+    <limit lower="${tilt_lower}" upper="${tilt_upper}" effort="${tilt_effort}" velocity="${tilt_velocity}" />
+    <dynamics damping="${gimbal_damping}" friction="${gimbal_friction}" />
+  </joint>
+  <!-- ========== Gimbal Base to Baselink  ========== -->
+  <joint name="gimbal_base_joint" type="fixed">
+    <parent link="base_link" />
+    <child link="gimbal_base_link" />
+    <origin xyz="0.12  0  0.3395" rpy="0 0 0" />
+  </joint>
+</robot>

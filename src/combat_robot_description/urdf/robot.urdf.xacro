@@ -1,0 +1,18 @@
+<?xml version="1.0"?>
+<robot xmlns:xacro="http://www.ros.org/wiki/xacro" name="combat_robot">
+
+  <xacro:include filename="$(find combat_robot_description)/urdf/macros.xacro" />
+  <xacro:include filename="$(find combat_robot_description)/urdf/materials.xacro" />
+
+  <xacro:include filename="$(find combat_robot_description)/urdf/chassis.xacro" />
+  <xacro:include filename="$(find combat_robot_description)/urdf/gimbal.xacro" />
+  <xacro:include filename="$(find combat_robot_description)/urdf/camera.xacro" />
+  <xacro:include filename="$(find combat_robot_description)/urdf/chassis_cameras.xacro"/>
+  <xacro:include filename="$(find combat_robot_description)/urdf/rifle.xacro" />
+  
+  <xacro:include filename="$(find combat_robot_description)/urdf/sensors.xacro" />
+
+  <xacro:include filename="$(find combat_robot_description)/urdf/gazebo.xacro" />
+  <xacro:include filename="$(find combat_robot_description)/urdf/gazebo_control.xacro" />
+
+</robot>

@@ -1,0 +1,86 @@
+<?xml version="1.0"?>
+<robot xmlns:xacro="http://www.ros.org/wiki/xacro">
+
+    <!-- Namespace argument -->
+    <xacro:arg name="robot_ns" default="" />
+    <xacro:property name="ns" value="$(arg robot_ns)" />
+    <xacro:property name="topic_prefix" value="${'/' + ns if ns != '' else ''}" />
+    <xacro:property name="frame_prefix" value="${ns + '/' if ns != '' else ''}" />
+
+
+    <!-- DIFFERENTIAL DRIVE   -->
+    <gazebo>
+        <plugin filename="gz-sim-diff-drive-system" name="gz::sim::systems::DiffDrive">
+            <!-- Left side wheels -->
+            <left_joint>left_front_wheel_joint</left_joint>
+            <left_joint>left_mid_wheel_joint</left_joint>
+            <left_joint>left_rear_wheel_joint</left_joint>
+
+            <!-- Right side wheels -->
+            <right_joint>right_front_wheel_joint</right_joint>
+            <right_joint>right_mid_wheel_joint</right_joint>
+            <right_joint>right_rear_wheel_joint</right_joint>
+
+            <!-- Kinematics -->
+            <wheel_separation>0.7</wheel_separation>
+            <wheel_radius>0.12</wheel_radius>
+
+            <!-- Limits -->
+            <max_linear_acceleration>2.5</max_linear_acceleration>
+            <max_angular_acceleration>3</max_angular_acceleration>
+            <min_linear_acceleration>-2.5</min_linear_acceleration>
+            <min_angular_acceleration>-3</min_angular_acceleration>
+            <max_velocity>1.94</max_velocity>
+            <min_velocity>-1.94</min_velocity>
+
+            <!-- Topics with namespace -->
+            <topic>${topic_prefix}/cmd_vel</topic>
+            <odom_topic>${topic_prefix}/odom</odom_topic>
+            <tf_topic>${topic_prefix}/tf</tf_topic>
+            <frame_id>${frame_prefix}odom</frame_id>
+            <child_frame_id>${frame_prefix}base_footprint</child_frame_id>
+
+            <odom_publish_frequency>30</odom_publish_frequency>
+        </plugin>
+        <plugin filename="gz-sim-joint-state-publisher-system"
+            name="gz::sim::systems::JointStatePublisher">
+            <joint_name>left_front_wheel_joint</joint_name>
+            <joint_name>left_mid_wheel_joint</joint_name>
+            <joint_name>left_rear_wheel_joint</joint_name>
+            <joint_name>right_front_wheel_joint</joint_name>
+            <joint_name>right_mid_wheel_joint</joint_name>
+            <joint_name>right_rear_wheel_joint</joint_name>
+            <joint_name>gimbal_pan_joint</joint_name>
+            <joint_name>gimbal_tilt_joint</joint_name>
+            <topic>${topic_prefix}/joint_states</topic>
+            <update_rate>50</update_rate>
+        </plugin>
+    </gazebo>
+
+
+    <!-- GIMBAL CONTROLLERS   -->
+
+    <!-- Gimbal Pan Controller -->
+    <gazebo>
+        <plugin filename="gz-sim-joint-position-controller-system"
+            name="gz::sim::systems::JointPositionController">
+            <joint_name>gimbal_pan_joint</joint_name>
+            <topic>${topic_prefix}/gimbal/pan_cmd</topic>
+            <p_gain>5</p_gain>
+            <i_gain>0.0</i_gain>
+            <d_gain>1.0</d_gain>
+        </plugin>
+    </gazebo>
+
+    <!-- Gimbal Tilt Controller -->
+    <gazebo>
+        <plugin filename="gz-sim-joint-position-controller-system"
+            name="gz::sim::systems::JointPositionController">
+            <joint_name>gimbal_tilt_joint</joint_name>
+            <topic>${topic_prefix}/gimbal/tilt_cmd</topic>
+            <p_gain>5</p_gain>
+            <i_gain>0.0</i_gain>
+            <d_gain>1.0</d_gain>
+        </plugin>
+    </gazebo>
+</robot>

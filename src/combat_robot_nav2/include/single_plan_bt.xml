@@ -1,0 +1,25 @@
+<root main_tree_to_execute="MainTree">
+  <BehaviorTree ID="MainTree">
+    <RecoveryNode number_of_retries="6" name="NavigateRecovery">
+      
+      <Sequence name="NavigateSequence">
+        <ComputePathToPose goal="{goal}" path="{path}" planner_id="GridBased"/>
+        
+        <RecoveryNode number_of_retries="10" name="FollowPathWithReplan">
+          <FollowPath path="{path}" controller_id="FollowPath"/>
+          
+          <Sequence name="ReplanOnFailure">
+            <ClearEntireCostmap name="ClearLocalCostmap" service_name="local_costmap/clear_entirely_local_costmap"/>
+            <ComputePathToPose goal="{goal}" path="{path}" planner_id="GridBased"/>
+          </Sequence>
+        </RecoveryNode>
+      </Sequence>
+
+      <Sequence name="GlobalRecoveryActions">
+        <ClearEntireCostmap name="ClearGlobalCostmap" service_name="global_costmap/clear_entirely_global_costmap"/>
+        <Wait wait_duration="1.0"/>
+      </Sequence>
+      
+    </RecoveryNode>
+  </BehaviorTree>
+</root>

@@ -1,0 +1,31 @@
+<?xml version="1.0"?>
+<?xml-model href="http://download.ros.org/schema/package_format3.xsd" schematypens="http://www.w3.org/2001/XMLSchema"?>
+<package format="3">
+  <name>combat_robot_nav2</name>
+  <version>0.0.0</version>
+  <description>TODO: Package description</description>
+  <maintainer email="skyautonet@todo.todo">skyautonet</maintainer>
+  <license>TODO: License declaration</license>
+
+  <buildtool_depend>ament_cmake</buildtool_depend>
+
+  <!-- 1. ROS 2 핵심 C++ 및 통신 라이브러리 -->
+  <depend>rclcpp</depend>
+  <depend>rclcpp_action</depend>
+  <depend>geometry_msgs</depend>
+  <depend>nav2_msgs</depend>
+
+  <!-- 2. GPS 변환 관련 라이브러리 (잘 추가하셨던 부분) -->
+  <depend>robot_localization</depend>
+  <depend>geographic_msgs</depend>
+
+  <!-- 3. 우리가 만든 커스텀 메시지 패키지 (필수!) -->
+  <depend>combat_robot_msgs</depend>
+
+  <test_depend>ament_lint_auto</test_depend>
+  <test_depend>ament_lint_common</test_depend>
+
+  <export>
+    <build_type>ament_cmake</build_type>
+  </export>
+</package>

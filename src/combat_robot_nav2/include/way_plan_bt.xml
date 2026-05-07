@@ -1,0 +1,30 @@
+<root main_tree_to_execute="MainTree">
+  <BehaviorTree ID="MainTree">
+    <RecoveryNode number_of_retries="6" name="NavigateRecovery">
+      
+      <ReactiveSequence name="MonitorAndFollow">
+        
+        <RateController hz="1.0">
+          <Fallback name="ReplanIfBlocked">
+            <IsPathValid path="{path}"/>
+            
+            <Sequence name="Replan">
+              <RemovePassedGoals input_goals="{goals}" output_goals="{updated_goals}" radius="0.5"/>
+              <ComputePathThroughPoses goals="{updated_goals}" path="{path}" planner_id="GridBased"/>
+            </Sequence>
+          </Fallback>
+        </RateController>
+
+        <FollowPath path="{path}" controller_id="FollowPath"/>
+        
+      </ReactiveSequence>
+      
+      <Sequence name="RecoveryActions">
+        <ClearEntireCostmap name="ClearLocalCostmap-Subtree" service_name="local_costmap/clear_entirely_local_costmap"/>
+        <ClearEntireCostmap name="ClearGlobalCostmap-Subtree" service_name="global_costmap/clear_entirely_global_costmap"/>
+        <Wait wait_duration="1.0"/>
+      </Sequence>
+      
+    </RecoveryNode>
+  </BehaviorTree>
+</root>

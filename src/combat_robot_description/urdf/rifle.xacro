@@ -1,0 +1,36 @@
+<?xml version="1.0"?>
+<robot xmlns:xacro="http://www.ros.org/wiki/xacro" name="rifle_holder">
+
+  <!-- Rifle along with holder dimensions -->
+  <xacro:property name="rifle_x" value="0.837" />
+  <xacro:property name="rifle_y" value="0.107" />
+  <xacro:property name="rifle_z" value="0.275" />
+  <xacro:property name="rifle_mass" value="1.0" />
+
+  <!--  RIFLE LINK == -->
+  <link name="rifle_link">
+    <visual>
+      <origin xyz="0 0 0" rpy="0 0 0" />
+      <geometry>
+        <mesh filename="package://combat_robot_description/meshes/rifle.dae" />
+      </geometry>
+    </visual>
+    <collision>
+      <geometry>
+        <box size="${rifle_x} ${rifle_y} ${rifle_z}" />
+      </geometry>
+    </collision>
+    <inertial>
+      <mass value="${rifle_mass}" />
+      <xacro:box_inertia m="${rifle_mass}" x="${rifle_x}" y="${rifle_y}"
+        z="${rifle_z}" />
+    </inertial>
+  </link>
+
+  <joint name="rifle_joint" type="fixed">
+    <parent link="gimbal_tilt_link" />
+    <child link="rifle_link" />
+    <origin xyz="-0.06 -0.128 0.019" rpy="0 0 0" />
+  </joint>
+
+</robot>
