@@ -17,22 +17,31 @@ def generate_launch_description():
     xacro_file = os.path.join(pkg_vehicle_desc, 'urdf', 'robot.urdf.xacro')
     robot_description_config = Command(['xacro ', xacro_file])
 
-   
+    # ==========================================
+    # [Step 1] 즉시 실행: 상태 발행, EKF, CAN Reader
+    # ==========================================
     rsp_node = Node(
         package='robot_state_publisher',
         executable='robot_state_publisher',
         parameters=[{'robot_description': robot_description_config, 'use_sim_time': use_sim_time}]
     )
 
-    # 🔥 tf_gnss_fix와 time_sync_node는 중복 및 불필요하여 삭제됨
-
     localization_launch = IncludeLaunchDescription(
         PythonLaunchDescriptionSource(os.path.join(pkg_combat_nav, 'launch', 'localization.launch.py')),
         launch_arguments={'use_sim_time': use_sim_time}.items()
     )
 
+    # 🌟 추가된 CAN Reader 노드 (파이썬 스크립트)
+    can_reader_node = Node(
+        package='combat_robot_nav2',
+        executable='can_reader.py',
+        name='can_reader',
+        output='screen',
+        parameters=[{'use_sim_time': use_sim_time}]
+    )
+
     # ==========================================
-    # [Step 2] 2초 뒤 실행: 안정된 좌표계 위에 맵 띄우기
+    # [Step 2] 2초 뒤 실행: 맵 서버 가동
     # ==========================================
     map_yaml_file = os.path.join(pkg_combat_nav, 'map', 'incheon', 'incheon.yaml')
     
@@ -56,7 +65,7 @@ def generate_launch_description():
     nav_timer = TimerAction(period=5.0, actions=[navigation_launch])
 
     # ==========================================
-    # [Step 4] 7초 뒤 실행: RViz 켜기
+    # [Step 4] 7초 뒤 실행: RViz 켜기 (현재 주석처리됨)
     # ==========================================
     rviz2_node = Node(
         package='rviz2', executable='rviz2', name='rviz2',
@@ -64,11 +73,26 @@ def generate_launch_description():
     )
     rviz_timer = TimerAction(period=7.0, actions=[rviz2_node])
 
+    # ==========================================
+    # [Step 5] 8초 뒤 실행: Mission Control 가동
+    # ==========================================
+    # 🌟 Nav2가 완전히 켜진 후 안전하게 실행되도록 8초 딜레이
+    mission_control_node = Node(
+        package='combat_robot_nav2',
+        executable='mission_control_node',
+        name='mission_control',
+        output='screen',
+        parameters=[{'use_sim_time': use_sim_time}]
+    )
+    mission_timer = TimerAction(period=8.0, actions=[mission_control_node])
+
     return LaunchDescription([
         DeclareLaunchArgument('use_sim_time', default_value='false'),
         rsp_node,
         localization_launch,
+        can_reader_node,  # <-- CAN 리더 추가
         map_timer,
         nav_timer,
-        #rviz_timer
+        mission_timer,     # <-- Mission Control 추가
+        rviz_timer
     ])
