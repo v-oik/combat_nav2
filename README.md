@@ -223,8 +223,7 @@ sudo chmod 777 /dev/ttyUSB0
 
 ```bash
 cd ~/ros2_ws/src
-git clone [https://github.com/bluespace-ai/bluespace_ai_xsens_ros_mti_driver.git](https://github.com/bluespace-ai/bluespace_ai_xsens_ros_mti_driver.git)
-```
+git clone https://github.com/bluespace-ai/bluespace_ai_xsens_ros_mti_driver.git
 
 ---
 

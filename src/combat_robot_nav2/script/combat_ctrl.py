@@ -105,8 +105,10 @@ class JoystickWorker(threading.Thread):
 
         while not self.stop_event.is_set():
             pygame.event.pump()
-            steer_raw = self.joy.get_axis(JOY_AXIS_STEER)   # -1 ~ 1
-            speed_raw = self.joy.get_axis(JOY_AXIS_SPEED)   # -1 ~ 1
+            
+            # 조이스틱 스틱을 왼쪽으로 밀 때 양수(+)가 나오도록 유지
+            steer_raw = -self.joy.get_axis(JOY_AXIS_STEER) 
+            speed_raw = self.joy.get_axis(JOY_AXIS_SPEED)
 
             # Invert speed (stick up = negative on many pads)
             speed_raw = -speed_raw
@@ -114,7 +116,6 @@ class JoystickWorker(threading.Thread):
             steer = int(steer_raw * JOY_SCALER_STEER)
             speed = int(speed_raw * JOY_SCALER_SPEED)
 
-            # 큐를 통해 UI 스레드에 조이스틱 데이터 전달
             self.ui_queue.put(("joy", (steer, speed)))
             time.sleep(0.02)   # 50Hz
 
@@ -157,7 +158,6 @@ class RxWorker(threading.Thread):
             if msg is None:
                 continue
             try:
-                # 큐를 통해 UI 스레드에 CAN 수신 데이터 전달
                 self.ui_queue.put(("rx", msg))
             except Exception as e:
                 print("Rx callback error:", e)
@@ -196,15 +196,15 @@ class VehicleControl:
         self.init_ui()
 
         # --- 키보드 방향키 바인딩 ---
-        # 창이 활성화되어 있을 때 키보드 입력을 받도록 설정합니다.
         self.root.bind('<Up>', self.increase_speed)
         self.root.bind('<Down>', self.decrease_speed)
-        self.root.bind('<Left>', self.decrease_steer)
-        self.root.bind('<Right>', self.increase_steer)
-        # 스페이스바를 누르면 속도와 조향을 0으로 긴급 초기화
+        
+        # 왼쪽 화살표 = 값 증가(+) / 오른쪽 화살표 = 값 감소(-)
+        self.root.bind('<Left>', self.increase_steer)
+        self.root.bind('<Right>', self.decrease_steer)
+        
         self.root.bind('<space>', self.reset_controls)
 
-        # Start background tasks
         self.tx_worker.start()
         self.rx_worker.start()
 
@@ -213,7 +213,6 @@ class VehicleControl:
         else:
             self.status_label.config(text="CAN: connected (PCAN 250k)")
 
-        # Main loops
         self.process_ui_queue()
         self.push_tx_loop()
 
@@ -221,7 +220,6 @@ class VehicleControl:
         frame = ttk.Frame(self.root, padding="10")
         frame.pack(fill=tk.BOTH, expand=True)
 
-        # Control Checkboxes
         ctrl_frame = ttk.Frame(frame)
         ctrl_frame.pack(fill=tk.X, pady=10)
         
@@ -229,39 +227,32 @@ class VehicleControl:
         ttk.Checkbutton(ctrl_frame, text="Headlights (Laser)", variable=self.laser_enabled).pack(side=tk.LEFT, padx=5)
         ttk.Checkbutton(ctrl_frame, text="Enable Joystick", variable=self.joystick_enabled, command=self.toggle_joystick).pack(side=tk.LEFT, padx=5)
 
-        # Sliders
         slider_frame = ttk.LabelFrame(frame, text="Manual Control (Use Arrow Keys / Spacebar to Stop)")
         slider_frame.pack(fill=tk.BOTH, expand=True, pady=10)
 
-        # Steer
+        # UI 슬라이더 시각적 일치 (왼쪽이 +, 오른쪽이 -)
         ttk.Label(slider_frame, text="Steering:").grid(row=0, column=0, padx=5, pady=10, sticky="w")
-        self.steer_slider = ttk.Scale(slider_frame, from_=-JOY_SCALER_STEER, to=JOY_SCALER_STEER, orient=tk.HORIZONTAL, variable=self.current_steer)
+        self.steer_slider = ttk.Scale(slider_frame, from_=JOY_SCALER_STEER, to=-JOY_SCALER_STEER, orient=tk.HORIZONTAL, variable=self.current_steer)
         self.steer_slider.grid(row=0, column=1, padx=5, sticky="ew")
         self.steer_val_lbl = ttk.Label(slider_frame, text="0", width=5)
         self.steer_val_lbl.grid(row=0, column=2, padx=5)
 
-        # Speed
         ttk.Label(slider_frame, text="Speed:").grid(row=1, column=0, padx=5, pady=10, sticky="w")
-        self.speed_slider = ttk.Scale(slider_frame, from_=-JOY_SCALER_SPEED, to=JOY_SCALER_SPEED, orient=tk.HORIZONTAL, variable=self.current_speed)
+        self.speed_slider = ttk.Scale(slider_frame, from_=JOY_SCALER_SPEED, to=-JOY_SCALER_SPEED, orient=tk.HORIZONTAL, variable=self.current_speed)
         self.speed_slider.grid(row=1, column=1, padx=5, sticky="ew")
         self.speed_val_lbl = ttk.Label(slider_frame, text="0", width=5)
         self.speed_val_lbl.grid(row=1, column=2, padx=5)
 
         slider_frame.columnconfigure(1, weight=1)
 
-        # Status
         self.status_label = ttk.Label(frame, text="Status: Ready", font=("Arial", 10, "bold"))
         self.status_label.pack(side=tk.BOTTOM, fill=tk.X, pady=5)
 
-        # 슬라이더 값 변경 시 라벨 업데이트 이벤트 연결
         self.current_steer.trace_add('write', lambda *args: self.steer_val_lbl.config(text=str(self.current_steer.get())))
         self.current_speed.trace_add('write', lambda *args: self.speed_val_lbl.config(text=str(self.current_speed.get())))
 
-    # -----------------------------------
-    # 키보드 이벤트 처리 함수들
-    # -----------------------------------
     def increase_speed(self, event=None):
-        step = 200  # 한 번 누를 때 증가할 속도량
+        step = 200  
         new_val = min(self.current_speed.get() + step, JOY_SCALER_SPEED)
         self.current_speed.set(new_val)
 
@@ -271,7 +262,7 @@ class VehicleControl:
         self.current_speed.set(new_val)
 
     def increase_steer(self, event=None):
-        step = 100  # 한 번 누를 때 증가할 조향량
+        step = 100  
         new_val = min(self.current_steer.get() + step, JOY_SCALER_STEER)
         self.current_steer.set(new_val)
 
@@ -281,13 +272,9 @@ class VehicleControl:
         self.current_steer.set(new_val)
 
     def reset_controls(self, event=None):
-        """스페이스바를 눌렀을 때 0으로 복귀"""
         self.current_speed.set(0)
         self.current_steer.set(0)
 
-    # -----------------------------------
-    # 시스템 컨트롤 함수들
-    # -----------------------------------
     def toggle_joystick(self):
         state = self.joystick_enabled.get()
         if state:  
@@ -303,7 +290,6 @@ class VehicleControl:
                 self.joy_thread = None
 
     def process_ui_queue(self):
-        """ 워커 스레드(Rx, Joystick)에서 보낸 메시지를 확인하여 안전하게 GUI 업데이트 """
         while not self.ui_queue.empty():
             msg_type, data = self.ui_queue.get()
             
@@ -319,7 +305,6 @@ class VehicleControl:
                 self.current_steer.set(steer)
                 self.current_speed.set(speed)
 
-        # 약 33ms (~30Hz) 마다 반복
         self.root.after(33, self.process_ui_queue)
 
     def apply_deadzone(self, value, dz):
@@ -328,7 +313,6 @@ class VehicleControl:
         return value
 
     def push_tx_loop(self):
-        """ 30Hz 주기로 RPDO 전송을 스케줄링하는 루프 """
         steer = self.apply_deadzone(self.current_steer.get(), DEAD_ZONE_STEER)
         speed = self.apply_deadzone(self.current_speed.get(), DEAD_ZONE_SPEED)
 
@@ -337,11 +321,12 @@ class VehicleControl:
         self.filterd_steer = (1 - alpha) * self.filterd_steer + alpha * steer
         self.filterd_speed = (1 - alpha) * self.filterd_speed + alpha * speed
         
-        # 차동 구동부 (Differential Drive) 변환
+        # 🌟 [물리적 하드웨어 방향에 맞게 모터 부호 최종 수정]
+        # 왼쪽 키 누름 -> steer 양수(+) -> 하드웨어에서 왼쪽으로 돌도록 + / - 배치 변경
         left_wheel = int(self.filterd_speed + self.filterd_steer)
         right_wheel = int(self.filterd_speed - self.filterd_steer)
 
-        # 섀시 최대 한계 속도 클램핑 (-5600 ~ 5600)
+        # 섀시 최대 한계 속도 클램핑
         left_wheel = max(-JOY_SCALER_SPEED, min(JOY_SCALER_SPEED, left_wheel))
         right_wheel = max(-JOY_SCALER_SPEED, min(JOY_SCALER_SPEED, right_wheel))
 
@@ -358,12 +343,10 @@ class VehicleControl:
         except queue.Full:
             pass
 
-        # 1000ms / CAN_SEND_FREQ_HZ 주기 (30Hz 기준 약 33ms)
         self.root.after(round(1000 / CAN_SEND_FREQ_HZ), self.push_tx_loop)
 
     def on_closing(self):
         print("Shutting down threads...")
-        # 안전한 정지를 위해 속도 0 및 제어 중지 신호 전송
         payload = struct.pack("<hhBBBB", 0, 0, 0x01, 0x00, 0x00, 0x05)
         try:
             self.tx_queue.put_nowait((CMD_CAN_ID, payload))

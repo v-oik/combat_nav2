@@ -31,7 +31,7 @@ def generate_launch_description():
     # 5. 커스텀 헤딩 파싱 노드 (/nmea_sentence 구독 -> /gps/heading_imu 발행)
     nav2_heading = Node(
         package='combat_robot_nav2',
-        executable='nav2_heading_provider.py',
+        executable='gnss_heading.py',
         output='screen'
     )
 

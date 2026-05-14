@@ -42,7 +42,6 @@ install(DIRECTORY
   launch
   config
   map
-  rviz
   world
   DESTINATION share/${PROJECT_NAME}
 )
