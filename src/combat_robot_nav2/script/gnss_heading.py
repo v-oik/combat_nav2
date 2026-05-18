@@ -45,7 +45,9 @@ class Nav2HeadingProvider(Node):
                     # 4. Nav2/EKF용 IMU 쿼터니언 메시지 발행
                     imu_msg = Imu()
                     imu_msg.header.stamp = self.get_clock().now().to_msg()
-                    imu_msg.header.frame_id = "gps_link" # 로봇 URDF에 맞게 수정 가능
+                    
+                    # 🔥 수정됨: gps_link -> base_footprint (TF 트리에 맞게 변경하여 데이터 증발 방지)
+                    imu_msg.header.frame_id = "base_footprint" 
                     
                     qx, qy, qz, qw = euler_to_quaternion(ros_yaw_rad)
                     imu_msg.orientation.x = qx

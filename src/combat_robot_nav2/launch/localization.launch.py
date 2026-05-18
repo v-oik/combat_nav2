@@ -44,8 +44,8 @@ def generate_launch_description():
         name='navsat_transform',
         output='screen',
         parameters=[ekf_config_file, {'use_sim_time': use_sim_time}],
-        remappings=[('imu', '/imu/data'),        # 🔥 수정: 원본 IMU 토픽
-                    ('gps/fix', '/fix'),         # 🔥 수정: 원본 GPS 토픽
+        remappings=[('imu', '/gps/heading_imu'),     # 🔥 수정: 지자기 간섭 방지를 위해 듀얼 GPS 헤딩으로 변경
+                    ('gps/fix', '/fix'),
                     ('odometry/filtered', 'odometry/global')]
     )
 
