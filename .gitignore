@@ -2,3 +2,4 @@ build/
 install/
 log/
 combat_bag_260429/
+*.pgm/

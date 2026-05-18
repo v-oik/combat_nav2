@@ -94,5 +94,5 @@ def generate_launch_description():
         map_timer,
         nav_timer,
         mission_timer,     # <-- Mission Control 추가
-        rviz_timer
+        #rviz_timer
     ])
