@@ -130,14 +130,14 @@ class VehicleROSNode(Node):
         odom_msg.twist.twist.linear.x = float(v_x)
         odom_msg.twist.twist.angular.z = float(v_yaw)
 
-        # 🌟 평면 2D 주행 신뢰도 설정
+        # 🌟 평면 2D 주행 신뢰도 설정 (회전 공분산을 0.5로 높임)
         covariance = [
             0.01, 0.0,  0.0,  0.0, 0.0, 0.0,
             0.0,  0.01, 0.0,  0.0, 0.0, 0.0,
             0.0,  0.0,  999.0, 0.0, 0.0, 0.0,
             0.0,  0.0,  0.0,  999.0, 0.0, 0.0,
             0.0,  0.0,  0.0,  0.0, 999.0, 0.0,
-            0.0,  0.0,  0.0,  0.0, 0.0, 0.01
+            0.0,  0.0,  0.0,  0.0, 0.0, 0.5
         ]
         odom_msg.pose.covariance = covariance
         odom_msg.twist.covariance = covariance
@@ -145,16 +145,17 @@ class VehicleROSNode(Node):
         self.odom_pub.publish(odom_msg)
 
         # 2. TF (Transform) 발행 추가
-        t = TransformStamped()
-        t.header.stamp = current_time.to_msg()
-        t.header.frame_id = 'odom'
-        t.child_frame_id = 'base_footprint'
-        t.transform.translation.x = self.x
-        t.transform.translation.y = self.y
-        t.transform.translation.z = 0.0
-        t.transform.rotation.z = q_z
-        t.transform.rotation.w = q_w
-        self.tf_broadcaster.sendTransform(t)
+        # EKF 노드와 충돌을 방지하기 위해 odom -> base_footprint 직접 발행을 주석 처리함
+        # t = TransformStamped()
+        # t.header.stamp = current_time.to_msg()
+        # t.header.frame_id = 'odom'
+        # t.child_frame_id = 'base_footprint'
+        # t.transform.translation.x = self.x
+        # t.transform.translation.y = self.y
+        # t.transform.translation.z = 0.0
+        # t.transform.rotation.z = q_z
+        # t.transform.rotation.w = q_w
+        # self.tf_broadcaster.sendTransform(t)
 
 # ==========================================
 # CAN & Thread Workers (안정적인 구조 유지)
