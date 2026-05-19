@@ -1,7 +1,0 @@
-digraph G {
-"world" -> "imu_link"[label=" Broadcaster: default_authority\nAverage rate: 100.593\nBuffer length: 5.06\nMost recent transform: 1779166537.52959\nOldest transform: 1779166532.469588\n"];
-edge [style=invis];
- subgraph cluster_legend { style=bold; color=black; label ="view_frames Result";
-"Recorded at time: 1779166537.5637355"[ shape=plaintext ] ;
-}->"world";
-}
