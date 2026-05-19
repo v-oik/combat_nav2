@@ -297,6 +297,10 @@ class VehicleControl:
                 if data.arbitration_id == FEEDBACK_CAN_ID and len(data.data) >= 4:
                     left_act, right_act = struct.unpack("<hh", data.data[0:4])
                     
+                    # 🛑 정지 시 미세 노이즈 제거 (데드존 적용)
+                    if abs(left_act) < 5: left_act = 0
+                    if abs(right_act) < 5: right_act = 0
+
                     # 🚀 수신된 바퀴 속도를 /odom 으로 발행 및 좌표 갱신
                     self.ros_node.publish_odom(left_act, right_act)
                     
