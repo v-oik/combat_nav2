@@ -29,7 +29,7 @@ def generate_launch_description():
         output='screen'
     )
 
-    # 4. GNSS: 시리얼 직접 열어서 헤딩(/gps/heading_imu) + 위치(/fix) + 속도(/vel) 발행
+    # 4. GNSS: /gps/heading_imu + /fix + /vel
     gnss_node = Node(
         package='combat_robot_nav2',
         executable='gnss_heading.py',
@@ -37,8 +37,11 @@ def generate_launch_description():
         parameters=[{
             'port': '/dev/ttyUSB1',
             'baud': 921600,
-            'heading_frame_id': 'base_footprint',
-            'gps_frame_id': 'gps'
+            'heading_frame_id': 'gps',
+            'gps_frame_id': 'gps',
+            # 🔥 안테나 baseline 보정 (로봇 정북 향했을 때 NMEA heading 값)
+            # 측정값 70.5° — 정북 향한 상태에서 echo로 확인한 값
+            'antenna_yaw_offset_deg': 70.5
         }]
     )
 

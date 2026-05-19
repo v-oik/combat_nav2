@@ -27,11 +27,10 @@ except ImportError as e:
 # ==========================================
 # 🌟 TinS-17 정밀 설정 (차량 스펙 및 CAN Protocol)
 # ==========================================
-WHEEL_RADIUS_M = 0.07      # 실제 바퀴(스프로킷) 반지름: 7cm
-TRACK_WIDTH_M = 0.90       # 양쪽 궤도 중심 사이의 거리 (회전 부족 시 이 값을 낮추세요)
-TRACK_SLIP_FACTOR = 1.2    # 🌟 궤도 차량 회전 슬립 계수 (회전 부족 시 올리세요)
+WHEEL_RADIUS_M = 0.07
+TRACK_WIDTH_M = 0.90
+TRACK_SLIP_FACTOR = 1.2
 
-# 1m 주행 시 0.06m(R=0.15기준) 오차 보정치 -> 새 스펙에 맞춘 스케일링
 CALIBRATION_SCALING = 35.714  
 
 ENCODER_PPR = 1024         
@@ -40,8 +39,8 @@ GEAR_RATIO = 30.0
 TICKS_PER_WHEEL_REV = ENCODER_PPR * GEAR_RATIO
 RAD_PER_TICK = ((2.0 * math.pi) / TICKS_PER_WHEEL_REV) * CALIBRATION_SCALING
 
-CMD_CAN_ID = 0x201          # RPDO0 (Master -> Chassis)
-FEEDBACK_CAN_ID = 0x181     # TPDO0 (Chassis -> Master)
+CMD_CAN_ID = 0x201
+FEEDBACK_CAN_ID = 0x181
 
 CAN_SEND_FREQ_HZ = 30       
 INTER_MSG_GAP_SEC = 0.0005  
@@ -53,7 +52,7 @@ MAX_STEER = 2000
 MAX_SPEED = 5600  
 
 # ==========================================
-# ROS 2 노드 클래스 (/odom 발행, /tf 발행, /cmd_vel 수신)
+# ROS 2 노드 클래스 (/odom 발행, /cmd_vel 수신)
 # ==========================================
 class VehicleROSNode(Node):
     def __init__(self, ui_app):
@@ -61,32 +60,30 @@ class VehicleROSNode(Node):
         self.ui_app = ui_app
         
         self.odom_pub = self.create_publisher(Odometry, '/odom', 10)
-        self.tf_broadcaster = TransformBroadcaster(self) # 🌟 TF Broadcaster 추가
+        self.tf_broadcaster = TransformBroadcaster(self)
         self.cmd_sub = self.create_subscription(Twist, '/cmd_vel', self.cmd_vel_callback, 10)
         
+        # 🔥 yaw 적분 제거 — EKF가 yaw 추정 담당
+        # 그래도 UI 표시용으로 누적치 보관 (orientation 발행에는 사용 안 함)
         self.x = 0.0
         self.y = 0.0
-        self.th = 0.0
+        self.th = 0.0   # UI 표시용만
         self.last_time = self.get_clock().now()
 
     def cmd_vel_callback(self, msg):
         v_x = msg.linear.x
-        v_yaw = msg.angular.z  # ROS 2 표준: 양수(+)가 좌회전(CCW)
+        v_yaw = msg.angular.z
         
-        # 1. m/s 를 좌/우 궤도의 목표 선속도(m/s)로 변환
         left_v = v_x - (v_yaw * TRACK_WIDTH_M / 2.0)
         right_v = v_x + (v_yaw * TRACK_WIDTH_M / 2.0)
         
-        # 2. 선속도를 틱(모터 엔코더 값)으로 변환
         conv = RAD_PER_TICK * WHEEL_RADIUS_M
         left_line = left_v / conv
         right_line = right_v / conv
         
-        # 3. GUI 슬라이더 계산식에 맞게 변환 (좌회전 시 right_line이 더 큼)
         speed = (left_line + right_line) / 2.0
         steer = (right_line - left_line) / 2.0
         
-        # 4. GUI 슬라이더 업데이트 (한계값 클램핑)
         self.ui_app.current_speed.set(max(-MAX_SPEED, min(MAX_SPEED, int(speed))))
         self.ui_app.current_steer.set(max(-MAX_STEER, min(MAX_STEER, int(steer))))
 
@@ -100,65 +97,58 @@ class VehicleROSNode(Node):
         right_v = right_line_s * RAD_PER_TICK * WHEEL_RADIUS_M
 
         v_x = (left_v + right_v) / 2.0
-        
-        # 🌟 궤도 차량 슬립(Slip) 현상 보정 적용
         ideal_v_yaw = (right_v - left_v) / TRACK_WIDTH_M
         v_yaw = ideal_v_yaw * TRACK_SLIP_FACTOR
 
-        delta_x = (v_x * math.cos(self.th)) * dt
-        delta_y = (v_x * math.sin(self.th)) * dt
-        delta_th = v_yaw * dt
+        # 🔥 UI 표시용 누적치 (EKF에 전달 안 됨)
+        self.th += v_yaw * dt
+        self.x += (v_x * math.cos(self.th)) * dt
+        self.y += (v_x * math.sin(self.th)) * dt
 
-        self.x += delta_x
-        self.y += delta_y
-        self.th += delta_th
-
-        q_w = math.cos(self.th / 2.0)
-        q_z = math.sin(self.th / 2.0)
-
-        # 1. Odometry 메시지 발행
+        # 🔥 Odometry 메시지 — orientation은 항상 identity (yaw 적분 제거)
+        # EKF는 v_x만 사용 (config에서 그렇게 설정)
         odom_msg = Odometry()
         odom_msg.header.stamp = current_time.to_msg()
         odom_msg.header.frame_id = 'odom'
         odom_msg.child_frame_id = 'base_footprint'
 
-        odom_msg.pose.pose.position.x = self.x
-        odom_msg.pose.pose.position.y = self.y
-        odom_msg.pose.pose.orientation.z = q_z
-        odom_msg.pose.pose.orientation.w = q_w
+        # 🔥 position과 orientation을 모두 0 (EKF가 v_x만 보게)
+        odom_msg.pose.pose.position.x = 0.0
+        odom_msg.pose.pose.position.y = 0.0
+        odom_msg.pose.pose.position.z = 0.0
+        odom_msg.pose.pose.orientation.x = 0.0
+        odom_msg.pose.pose.orientation.y = 0.0
+        odom_msg.pose.pose.orientation.z = 0.0
+        odom_msg.pose.pose.orientation.w = 1.0
 
         odom_msg.twist.twist.linear.x = float(v_x)
         odom_msg.twist.twist.angular.z = float(v_yaw)
 
-        # 🌟 평면 2D 주행 신뢰도 설정 (회전 공분산을 0.5로 높임)
-        covariance = [
-            0.01, 0.0,  0.0,  0.0, 0.0, 0.0,
-            0.0,  0.01, 0.0,  0.0, 0.0, 0.0,
-            0.0,  0.0,  999.0, 0.0, 0.0, 0.0,
-            0.0,  0.0,  0.0,  999.0, 0.0, 0.0,
-            0.0,  0.0,  0.0,  0.0, 999.0, 0.0,
-            0.0,  0.0,  0.0,  0.0, 0.0, 0.5
+        # 🔥 공분산: pose는 무한대(EKF가 쓰지 않게), twist는 신뢰도 표현
+        # EKF config에 따르면 v_x만 사용. v_x 공분산 = 0.05 (σ ≈ 0.22 m/s)
+        pose_cov = [
+            999.0, 0.0,   0.0,   0.0,   0.0,   0.0,
+            0.0,   999.0, 0.0,   0.0,   0.0,   0.0,
+            0.0,   0.0,   999.0, 0.0,   0.0,   0.0,
+            0.0,   0.0,   0.0,   999.0, 0.0,   0.0,
+            0.0,   0.0,   0.0,   0.0,   999.0, 0.0,
+            0.0,   0.0,   0.0,   0.0,   0.0,   999.0,
         ]
-        odom_msg.pose.covariance = covariance
-        odom_msg.twist.covariance = covariance
+        twist_cov = [
+            0.05,  0.0,   0.0,   0.0,   0.0,   0.0,    # v_x σ ≈ 0.22 m/s
+            0.0,   999.0, 0.0,   0.0,   0.0,   0.0,
+            0.0,   0.0,   999.0, 0.0,   0.0,   0.0,
+            0.0,   0.0,   0.0,   999.0, 0.0,   0.0,
+            0.0,   0.0,   0.0,   0.0,   999.0, 0.0,
+            0.0,   0.0,   0.0,   0.0,   0.0,   0.5,    # v_yaw σ ≈ 0.7 rad/s
+        ]
+        odom_msg.pose.covariance = pose_cov
+        odom_msg.twist.covariance = twist_cov
 
         self.odom_pub.publish(odom_msg)
 
-        # 2. TF (Transform) 발행 추가
-        # EKF 노드와 충돌을 방지하기 위해 odom -> base_footprint 직접 발행을 주석 처리함
-        # t = TransformStamped()
-        # t.header.stamp = current_time.to_msg()
-        # t.header.frame_id = 'odom'
-        # t.child_frame_id = 'base_footprint'
-        # t.transform.translation.x = self.x
-        # t.transform.translation.y = self.y
-        # t.transform.translation.z = 0.0
-        # t.transform.rotation.z = q_z
-        # t.transform.rotation.w = q_w
-        # self.tf_broadcaster.sendTransform(t)
-
 # ==========================================
-# CAN & Thread Workers (안정적인 구조 유지)
+# CAN & Thread Workers
 # ==========================================
 class CanBusWrapper:
     def __init__(self):
@@ -229,7 +219,6 @@ class VehicleControl:
 
         self.init_ui()
 
-        # 🚀 ROS 2 시스템 가동
         rclpy.init(args=None)
         self.ros_node = VehicleROSNode(self)
         self.ros_thread = threading.Thread(target=rclpy.spin, args=(self.ros_node,), daemon=True)
@@ -237,7 +226,6 @@ class VehicleControl:
 
         self.root.bind('<Up>', self.increase_speed)
         self.root.bind('<Down>', self.decrease_speed)
-        # 좌우 화살표 방향 반전 반영 (좌측: +, 우측: -)
         self.root.bind('<Left>', self.increase_steer)
         self.root.bind('<Right>', self.decrease_steer)
         self.root.bind('<space>', self.reset_controls)
@@ -263,7 +251,6 @@ class VehicleControl:
         slider_frame = ttk.LabelFrame(frame, text="Speed & Steering Targets (cmd_vel / Manual)")
         slider_frame.pack(fill=tk.BOTH, expand=True, pady=10)
 
-        # 슬라이더 방향 (왼쪽이 + 양수가 되도록 from과 to 위치 변경)
         ttk.Label(slider_frame, text="Steering:").grid(row=0, column=0, padx=5, pady=15, sticky="w")
         self.steer_slider = ttk.Scale(slider_frame, from_=MAX_STEER, to=-MAX_STEER, orient=tk.HORIZONTAL, variable=self.current_steer)
         self.steer_slider.grid(row=0, column=1, padx=5, sticky="ew")
@@ -297,14 +284,11 @@ class VehicleControl:
                 if data.arbitration_id == FEEDBACK_CAN_ID and len(data.data) >= 4:
                     left_act, right_act = struct.unpack("<hh", data.data[0:4])
                     
-                    # 🛑 정지 시 미세 노이즈 제거 (데드존 적용)
                     if abs(left_act) < 5: left_act = 0
                     if abs(right_act) < 5: right_act = 0
 
-                    # 🚀 수신된 바퀴 속도를 /odom 으로 발행 및 좌표 갱신
                     self.ros_node.publish_odom(left_act, right_act)
                     
-                    # UI에 모터 상태와 Odom 좌표 표시 결합
                     odom_info = f"X: {self.ros_node.x:.2f}m | Y: {self.ros_node.y:.2f}m | Yaw: {math.degrees(self.ros_node.th):.1f}°"
                     self.status_label.config(text=f"Motor L: {left_act}, R: {right_act}  ||  {odom_info}")
 
@@ -323,12 +307,10 @@ class VehicleControl:
             steer = self.apply_deadzone(self.current_steer.get(), DEAD_ZONE_STEER)
             speed = self.apply_deadzone(self.current_speed.get(), DEAD_ZONE_SPEED)
 
-            # 로우패스 필터로 부드러운 가감속 (기존 코드 강점 유지)
             alpha = 0.3
             self.filterd_steer = (1 - alpha) * self.filterd_steer + alpha * steer
             self.filterd_speed = (1 - alpha) * self.filterd_speed + alpha * speed
             
-            # 실제 CAN 명령 전송 부호 (좌회전(+)일 때 좌측 감소, 우측 증가)
             left_wheel = max(-MAX_SPEED, min(MAX_SPEED, int(self.filterd_speed + self.filterd_steer)))
             right_wheel = max(-MAX_SPEED, min(MAX_SPEED, int(self.filterd_speed - self.filterd_steer)))
             start_stop = 0x01

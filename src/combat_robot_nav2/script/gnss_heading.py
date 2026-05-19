@@ -50,16 +50,25 @@ class Nav2HeadingProvider(Node):
         # 파라미터
         self.declare_parameter('port', '/dev/ttyUSB1')
         self.declare_parameter('baud', 921600)
-        self.declare_parameter('heading_frame_id', 'base_footprint')
+        self.declare_parameter('heading_frame_id', 'gps')
         self.declare_parameter('gps_frame_id', 'gps')
-        # GST를 받지 못한 지 이 시간(초)이 지나면 fallback 사용
         self.declare_parameter('gst_timeout_sec', 2.0)
+        self.declare_parameter('antenna_yaw_offset_deg', 0.0)
+        # 🔥 GPS 공분산 최소값 (m) — EKF가 GPS를 너무 과신하지 않게
+        self.declare_parameter('min_sigma_horizontal', 0.10)
+        self.declare_parameter('min_sigma_vertical', 0.15)
+        # 🔥 fix quality가 이 값 미만이면 발행 안 함 (0=발행, 1=일반GPS 이상)
+        self.declare_parameter('min_fix_quality', 1)
 
         self.port = self.get_parameter('port').value
         self.baud = self.get_parameter('baud').value
         self.heading_frame = self.get_parameter('heading_frame_id').value
         self.gps_frame = self.get_parameter('gps_frame_id').value
         self.gst_timeout = self.get_parameter('gst_timeout_sec').value
+        self.antenna_offset = self.get_parameter('antenna_yaw_offset_deg').value
+        self.min_sigma_h = self.get_parameter('min_sigma_horizontal').value
+        self.min_sigma_v = self.get_parameter('min_sigma_vertical').value
+        self.min_fix_quality = self.get_parameter('min_fix_quality').value
 
         # 퍼블리셔
         self.pub_float = self.create_publisher(Float64, '/edge_heading', 10)
@@ -67,11 +76,11 @@ class Nav2HeadingProvider(Node):
         self.pub_fix = self.create_publisher(NavSatFix, '/fix', 10)
         self.pub_vel = self.create_publisher(TwistStamped, '/vel', 10)
 
-        # GST 캐시 (가장 최근 표준편차)
+        # GST 캐시
         self._gst_sigma_lat = None
         self._gst_sigma_lon = None
         self._gst_sigma_alt = None
-        self._gst_last_stamp = None  # rclpy Time
+        self._gst_last_stamp = None
 
         # 통계
         self._line_count = 0
@@ -79,8 +88,11 @@ class Nav2HeadingProvider(Node):
         self._gga_count = 0
         self._vtg_count = 0
         self._gst_count = 0
+        self._gga_dropped_nofix = 0      # 🔥 NO_FIX로 drop된 개수
         self._first_line_seen = False
         self._first_fix_logged = False
+        self._first_heading_logged = False
+        self._last_fix_quality = None
         self.create_timer(5.0, self._status_timer)
 
         # 시리얼
@@ -95,28 +107,39 @@ class Nav2HeadingProvider(Node):
         self._thread = threading.Thread(target=self._serial_loop, daemon=True)
         self._thread.start()
 
-        self.get_logger().info('✅ GNSS Provider started (heading + fix + vel + GST)')
+        self.get_logger().info(
+            f'✅ GNSS Provider started '
+            f'(heading_frame={self.heading_frame}, '
+            f'antenna_yaw_offset={self.antenna_offset:.2f}°, '
+            f'min_sigma_h={self.min_sigma_h:.3f}m, '
+            f'min_fix_quality={self.min_fix_quality})'
+        )
 
     def _status_timer(self):
         gst_age = '∞'
         if self._gst_last_stamp is not None:
             age = (self.get_clock().now() - self._gst_last_stamp).nanoseconds / 1e9
             gst_age = f'{age:.1f}s'
+        q_str = f'q={self._last_fix_quality}' if self._last_fix_quality is not None else 'q=?'
         self.get_logger().info(
             f'[status] line={self._line_count} '
             f'THS={self._ths_count} GGA={self._gga_count} '
+            f'(dropped={self._gga_dropped_nofix}) '
             f'VTG={self._vtg_count} GST={self._gst_count} '
-            f'(GST age={gst_age})'
+            f'GST_age={gst_age} {q_str}'
         )
         self._line_count = 0
         self._ths_count = 0
         self._gga_count = 0
         self._vtg_count = 0
         self._gst_count = 0
+        self._gga_dropped_nofix = 0
 
     def _serial_loop(self):
         while self._running and rclpy.ok():
             try:
+                if not self.ser or not self.ser.is_open:
+                    break
                 raw = self.ser.readline()
                 if not raw:
                     continue
@@ -134,11 +157,13 @@ class Nav2HeadingProvider(Node):
 
                 self._dispatch(line)
 
-            except serial.SerialException as e:
-                self.get_logger().error(f'Serial read error: {e}')
+            except (serial.SerialException, OSError) as e:
+                if self._running:
+                    self.get_logger().error(f'Serial read error: {e}')
                 break
             except Exception as e:
-                self.get_logger().warn(f'Loop error: {e}')
+                if self._running:
+                    self.get_logger().warn(f'Loop error: {e}')
 
     def _dispatch(self, sentence):
         tag = sentence[3:6]
@@ -158,7 +183,9 @@ class Nav2HeadingProvider(Node):
         if len(parts) < 3 or not parts[1] or 'A' not in parts[2]:
             return
         try:
-            heading_deg = float(parts[1])
+            raw_heading_deg = float(parts[1])
+            heading_deg = (raw_heading_deg - self.antenna_offset) % 360.0
+
             ros_yaw_rad = math.radians(90.0 - heading_deg)
             ros_yaw_rad = math.atan2(math.sin(ros_yaw_rad), math.cos(ros_yaw_rad))
 
@@ -184,11 +211,20 @@ class Nav2HeadingProvider(Node):
             self.pub_imu.publish(imu_msg)
 
             self._ths_count += 1
+
+            if not self._first_heading_logged:
+                self.get_logger().info(
+                    f'✅ 첫 heading 발행: '
+                    f'raw={raw_heading_deg:.2f}° offset={self.antenna_offset:.2f}° '
+                    f'→ robot_heading={heading_deg:.2f}° '
+                    f'(yaw_enu={math.degrees(ros_yaw_rad):.2f}°)'
+                )
+                self._first_heading_logged = True
+
         except Exception as e:
             self.get_logger().warn(f'THS parse error: {e} | {sentence}')
 
-    # ---------------- GST: pseudorange error stats ----------------
-    # $GNGST,utc,rms_range,smaj,smin,smaj_orient,sigma_lat,sigma_lon,sigma_alt*cs
+    # ---------------- GST ----------------
     def _handle_gst(self, sentence):
         body = sentence.split('*', 1)[0]
         p = body.split(',')
@@ -218,6 +254,13 @@ class Nav2HeadingProvider(Node):
             return
         try:
             fix_quality = int(p[6]) if p[6] else 0
+            self._last_fix_quality = fix_quality
+
+            # 🔥 NO_FIX 또는 낮은 quality면 발행 안 함 (EKF 보호)
+            if fix_quality < self.min_fix_quality:
+                self._gga_dropped_nofix += 1
+                return
+
             lat = nmea_to_decimal(p[2], p[3])
             lon = nmea_to_decimal(p[4], p[5])
             alt = float(p[9]) if p[9] else 0.0
@@ -253,8 +296,8 @@ class Nav2HeadingProvider(Node):
                     and self._gst_sigma_lat is not None):
                 age = (self.get_clock().now() - self._gst_last_stamp).nanoseconds / 1e9
                 if age <= self.gst_timeout:
-                    sigma_n = self._gst_sigma_lat   # lat sigma → North
-                    sigma_e = self._gst_sigma_lon   # lon sigma → East
+                    sigma_n = self._gst_sigma_lat
+                    sigma_e = self._gst_sigma_lon
                     sigma_u = self._gst_sigma_alt
                     use_gst = True
 
@@ -270,7 +313,12 @@ class Nav2HeadingProvider(Node):
                     sigma_e = sigma_n = max(hdop * 2.5, 1.0)
                     sigma_u = sigma_e * 1.5
 
-            # NavSatFix.position_covariance 는 ENU 순서 (East, North, Up)
+            # 🔥 공분산 최소값 적용 (EKF가 GPS를 너무 과신하지 않게)
+            sigma_e = max(sigma_e, self.min_sigma_h)
+            sigma_n = max(sigma_n, self.min_sigma_h)
+            sigma_u = max(sigma_u, self.min_sigma_v)
+
+            # NavSatFix.position_covariance 는 ENU 순서
             msg.position_covariance = [
                 sigma_e ** 2, 0.0,         0.0,
                 0.0,         sigma_n ** 2, 0.0,
@@ -281,7 +329,6 @@ class Nav2HeadingProvider(Node):
             self.pub_fix.publish(msg)
             self._gga_count += 1
 
-            # 첫 fix 한 번만 로그
             if not self._first_fix_logged:
                 src = 'GST' if use_gst else f'fallback(q={fix_quality})'
                 self.get_logger().info(
@@ -324,6 +371,11 @@ class Nav2HeadingProvider(Node):
     def destroy_node(self):
         self._running = False
         try:
+            if hasattr(self, '_thread') and self._thread.is_alive():
+                self._thread.join(timeout=1.5)
+        except Exception:
+            pass
+        try:
             self.ser.close()
         except Exception:
             pass
@@ -339,7 +391,11 @@ def main():
         pass
     finally:
         node.destroy_node()
-        rclpy.shutdown()
+        try:
+            if rclpy.ok():
+                rclpy.shutdown()
+        except Exception:
+            pass
 
 
 if __name__ == '__main__':

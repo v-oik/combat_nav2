@@ -2,7 +2,7 @@ ekf_filter_node_odom:
   ros__parameters:
     use_sim_time: false
     frequency: 30.0
-    sensor_timeout: 0.1
+    sensor_timeout: 1.0
     two_d_mode: true
     publish_tf: true
     map_frame: map
@@ -10,30 +10,42 @@ ekf_filter_node_odom:
     base_link_frame: base_footprint 
     world_frame: odom
 
-    # 1. 바퀴 오도메트리: 전진 속도(v_x)와 회전 속도(v_yaw) 사용
     odom0: /odom
     odom0_config: [false, false, false,
                    false, false, false,
                    true,  false, false,
-                   false, false, true,   # 🔥 v_yaw 켬: 정지 시 0.0을 잡아주어 IMU 드리프트 방지
+                   false, false, false,
                    false, false, false]
     odom0_queue_size: 10
+    odom0_differential: false
+    odom0_relative: false
 
-    # 2. Xsens IMU: 회전 각속도(v_yaw)만 사용하여 odom의 정밀도 보조
-    imu0: /imu/data
+    imu0: /gps/heading_imu
     imu0_config: [false, false, false,
+                  false, false, true,
                   false, false, false,
                   false, false, false,
-                  false, false, true,   # 회전 각속도(Z) 사용
                   false, false, false]
     imu0_queue_size: 10
-    imu0_relative: true
+    imu0_relative: false
+    imu0_differential: false
+
+    imu1: /imu/data
+    imu1_config: [false, false, false,
+                  false, false, false,
+                  false, false, false,
+                  false, false, true,
+                  false, false, false]
+    imu1_queue_size: 10
+    imu1_relative: false
+    imu1_differential: true
+
 
 ekf_filter_node_map:
   ros__parameters:
     use_sim_time: false
     frequency: 30.0
-    sensor_timeout: 0.1
+    sensor_timeout: 1.0
     two_d_mode: true
     publish_tf: true
     map_frame: map
@@ -41,55 +53,55 @@ ekf_filter_node_map:
     base_link_frame: base_footprint 
     world_frame: map
 
-    # 1. 바퀴 오도메트리: (v_yaw를 사용하여 정지 시 안정성 확보)
-    odom0: /odom
-    odom0_config: [false, false, false,
+    odom0: /odometry/gps_map
+    odom0_config: [true,  true,  false,
                    false, false, false,
-                   true,  false, false,
-                   false, false, true,   # 🔥 v_yaw 켬
+                   false, false, false,
+                   false, false, false,
                    false, false, false]
+    odom0_queue_size: 10
+    odom0_differential: false
+    odom0_relative: false
+    odom0_pose_rejection_threshold: 10.0
 
-    # 2. Xsens IMU: 각속도 보조 (GNSS 헤딩과 함께 사용하여 보정)
-    imu0: /imu/data
+    imu0: /gps/heading_imu
     imu0_config: [false, false, false,
-                  false, false, false,
-                  false, false, false,
-                  false, false, true,   # 🔥 v_yaw 다시 켬 (GNSS 헤딩과 상호 보완)
-                  false, false, false]
-
-    # 3. [추가] Dual GNSS Heading: 우리가 뽑아낸 정밀한 방향 데이터(Yaw)
-    # 절대적인 방향을 잡아주므로 GPS 위치가 튀는 것을 막아줍니다.
-    imu1: /gps/heading_imu
-    imu1_config: [false, false, false,
-                  false, false, true,   # Yaw(절대 방향) 사용!
+                  false, false, true,
                   false, false, false,
                   false, false, false,
                   false, false, false]
-    imu1_queue_size: 10
-    imu1_relative: false
+    imu0_queue_size: 10
+    imu0_relative: false
+    imu0_differential: false
 
-    # 4. GPS 절대 위치 (navsat_transform에서 생성된 X, Y)
-    odom1: /odometry/gps
-    odom1_config: [true,  true,  false,  # X, Y 위치 사용
-                   false, false, false,
-                   false, false, false,
-                   false, false, false,
-                   false, false, false]
-    odom1_queue_size: 10
-    odom1_differential: false
+    initial_estimate_covariance: [1e-9, 0.0,  0.0,  0.0,  0.0,  0.0,  0.0,  0.0,  0.0,  0.0,  0.0,  0.0,  0.0,  0.0,  0.0,
+                                  0.0,  1e-9, 0.0,  0.0,  0.0,  0.0,  0.0,  0.0,  0.0,  0.0,  0.0,  0.0,  0.0,  0.0,  0.0,
+                                  0.0,  0.0,  1e-9, 0.0,  0.0,  0.0,  0.0,  0.0,  0.0,  0.0,  0.0,  0.0,  0.0,  0.0,  0.0,
+                                  0.0,  0.0,  0.0,  1e-9, 0.0,  0.0,  0.0,  0.0,  0.0,  0.0,  0.0,  0.0,  0.0,  0.0,  0.0,
+                                  0.0,  0.0,  0.0,  0.0,  1e-9, 0.0,  0.0,  0.0,  0.0,  0.0,  0.0,  0.0,  0.0,  0.0,  0.0,
+                                  0.0,  0.0,  0.0,  0.0,  0.0,  1e-9, 0.0,  0.0,  0.0,  0.0,  0.0,  0.0,  0.0,  0.0,  0.0,
+                                  0.0,  0.0,  0.0,  0.0,  0.0,  0.0,  1e-9, 0.0,  0.0,  0.0,  0.0,  0.0,  0.0,  0.0,  0.0,
+                                  0.0,  0.0,  0.0,  0.0,  0.0,  0.0,  0.0,  1e-9, 0.0,  0.0,  0.0,  0.0,  0.0,  0.0,  0.0,
+                                  0.0,  0.0,  0.0,  0.0,  0.0,  0.0,  0.0,  0.0,  1e-9, 0.0,  0.0,  0.0,  0.0,  0.0,  0.0,
+                                  0.0,  0.0,  0.0,  0.0,  0.0,  0.0,  0.0,  0.0,  0.0,  1e-9, 0.0,  0.0,  0.0,  0.0,  0.0,
+                                  0.0,  0.0,  0.0,  0.0,  0.0,  0.0,  0.0,  0.0,  0.0,  0.0,  1e-9, 0.0,  0.0,  0.0,  0.0,
+                                  0.0,  0.0,  0.0,  0.0,  0.0,  0.0,  0.0,  0.0,  0.0,  0.0,  0.0,  1e-9, 0.0,  0.0,  0.0,
+                                  0.0,  0.0,  0.0,  0.0,  0.0,  0.0,  0.0,  0.0,  0.0,  0.0,  0.0,  0.0,  1e-9, 0.0,  0.0,
+                                  0.0,  0.0,  0.0,  0.0,  0.0,  0.0,  0.0,  0.0,  0.0,  0.0,  0.0,  0.0,  0.0,  1e-9, 0.0,
+                                  0.0,  0.0,  0.0,  0.0,  0.0,  0.0,  0.0,  0.0,  0.0,  0.0,  0.0,  0.0,  0.0,  0.0,  1e-9]
+
 
 navsat_transform:
   ros__parameters:
     use_sim_time: false
     frequency: 30.0
-    delay: 3.0
-    magnetic_declination_radians: 0.0 
-    yaw_offset: 0.0             # 우리가 런치파일에서 이미 변환(90-heading)했다면 0.0
+    delay: 1.0
+    magnetic_declination_radians: 0.0
+    yaw_offset: 0.0
     zero_altitude: true
     broadcast_cartesian_transform: false
     publish_filtered_gps: true
-    use_odometry_yaw: false     # 바퀴 방향 대신 GNSS 헤딩을 쓰기 위해 false
-    wait_for_datum: true
-    datum: [37.5932637413, 126.6233586871, 0.0]
+    use_odometry_yaw: false
+    wait_for_datum: false
     base_link_frame: base_footprint
     world_frame: map
