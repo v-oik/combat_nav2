@@ -10,12 +10,12 @@ ekf_filter_node_odom:
     base_link_frame: base_footprint 
     world_frame: odom
 
-    # 1. 바퀴 오도메트리: 전진 속도(v_x)만 신뢰 (v_yaw는 충돌 방지를 위해 false로 수정)
+    # 1. 바퀴 오도메트리: 전진 속도(v_x)와 회전 속도(v_yaw) 사용
     odom0: /odom
     odom0_config: [false, false, false,
                    false, false, false,
                    true,  false, false,
-                   false, false, false,  # 🔥 원래 true였던 v_yaw를 false로 변경
+                   false, false, true,   # 🔥 v_yaw 켬: 정지 시 0.0을 잡아주어 IMU 드리프트 방지
                    false, false, false]
     odom0_queue_size: 10
 
@@ -41,20 +41,20 @@ ekf_filter_node_map:
     base_link_frame: base_footprint 
     world_frame: map
 
-    # 1. 바퀴 오도메트리: (v_yaw는 충돌 방지를 위해 false로 수정)
+    # 1. 바퀴 오도메트리: (v_yaw를 사용하여 정지 시 안정성 확보)
     odom0: /odom
     odom0_config: [false, false, false,
                    false, false, false,
                    true,  false, false,
-                   false, false, false,  # 🔥 여기도 false로 변경
+                   false, false, true,   # 🔥 v_yaw 켬
                    false, false, false]
 
-    # 2. Xsens IMU: 각속도 보조 (GNSS 헤딩과 충돌 방지를 위해 v_yaw 끔)
+    # 2. Xsens IMU: 각속도 보조 (GNSS 헤딩과 함께 사용하여 보정)
     imu0: /imu/data
     imu0_config: [false, false, false,
                   false, false, false,
                   false, false, false,
-                  false, false, false,  # 🔥 v_yaw 끔
+                  false, false, true,   # 🔥 v_yaw 다시 켬 (GNSS 헤딩과 상호 보완)
                   false, false, false]
 
     # 3. [추가] Dual GNSS Heading: 우리가 뽑아낸 정밀한 방향 데이터(Yaw)

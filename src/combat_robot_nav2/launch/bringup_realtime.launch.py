@@ -88,11 +88,14 @@ def generate_launch_description():
 
     return LaunchDescription([
         DeclareLaunchArgument('use_sim_time', default_value='false'),
+        DeclareLaunchArgument('with_gnss', default_value='true'),
         rsp_node,
         localization_launch,
         can_reader_node,  # <-- CAN 리더 추가
         map_timer,
         nav_timer,
         mission_timer,     # <-- Mission Control 추가
+        #rviz_timer
+    ])  # <-- Mission Control 추가
         #rviz_timer
     ])

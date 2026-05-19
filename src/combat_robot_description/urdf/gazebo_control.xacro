@@ -36,9 +36,13 @@
             <!-- Topics with namespace -->
             <topic>${topic_prefix}/cmd_vel</topic>
             <odom_topic>${topic_prefix}/odom</odom_topic>
-            <tf_topic>${topic_prefix}/tf</tf_topic>
+            <tf_topic>${topic_prefix}/tf_disabled</tf_topic>
             <frame_id>${frame_prefix}odom</frame_id>
             <child_frame_id>${frame_prefix}base_footprint</child_frame_id>
+
+            <publish_odom>true</publish_odom>
+            <publish_odom_tf>false</publish_odom_tf>
+            <publish_wheel_tf>true</publish_wheel_tf>
 
             <odom_publish_frequency>30</odom_publish_frequency>
         </plugin>
