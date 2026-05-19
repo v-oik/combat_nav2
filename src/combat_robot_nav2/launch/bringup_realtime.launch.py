@@ -98,4 +98,4 @@ def generate_launch_description():
         #rviz_timer
     ])  # <-- Mission Control 추가
         #rviz_timer
-    ])
+   
