@@ -49,12 +49,12 @@ ekf_filter_node_map:
                    false, false, false,  # 🔥 여기도 false로 변경
                    false, false, false]
 
-    # 2. Xsens IMU: 각속도 보조
+    # 2. Xsens IMU: 각속도 보조 (GNSS 헤딩과 충돌 방지를 위해 v_yaw 끔)
     imu0: /imu/data
     imu0_config: [false, false, false,
                   false, false, false,
                   false, false, false,
-                  false, false, true,
+                  false, false, false,  # 🔥 v_yaw 끔
                   false, false, false]
 
     # 3. [추가] Dual GNSS Heading: 우리가 뽑아낸 정밀한 방향 데이터(Yaw)

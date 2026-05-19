@@ -55,7 +55,9 @@ class Nav2HeadingProvider(Node):
                     imu_msg.orientation.z = qz
                     imu_msg.orientation.w = qw
                     
-                    # 방향(Yaw)에 대한 높은 신뢰도 부여 (공분산)
+                    # 방향(Yaw)에 대한 높은 신뢰도 부여 (공분산), 나머지는 무시
+                    imu_msg.orientation_covariance[0] = 999.0
+                    imu_msg.orientation_covariance[4] = 999.0
                     imu_msg.orientation_covariance[8] = 0.001 
                     
                     self.pub_imu.publish(imu_msg)
