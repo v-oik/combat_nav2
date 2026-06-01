@@ -68,7 +68,7 @@
   <joint name="front_lidar_joint" type="fixed">
     <parent link="base_link"/>
     <child link="front_lidar_link"/>
-    <origin xyz="0.6 0 0.3" rpy="0 0 0"/> </joint>
+    <origin xyz="0.6 0 -0.1" rpy="0 0 0"/> </joint>
 
   <gazebo reference="front_lidar_link">
     <sensor name="front_lidar_sensor" type="gpu_lidar">

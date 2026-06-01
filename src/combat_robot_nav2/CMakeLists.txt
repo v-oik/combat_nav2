@@ -50,6 +50,7 @@ install(PROGRAMS
   script/sensor_time_sync.py
   script/can_reader.py
   script/gnss_heading.py
+  script/gyro_bias_comp.py
   script/frame_fixer.py
   DESTINATION lib/${PROJECT_NAME}
 )

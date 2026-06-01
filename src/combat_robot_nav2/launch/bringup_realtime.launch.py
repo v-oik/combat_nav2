@@ -31,14 +31,9 @@ def generate_launch_description():
         launch_arguments={'use_sim_time': use_sim_time}.items()
     )
 
-    # 🌟 추가된 CAN Reader 노드 (파이썬 스크립트)
-    can_reader_node = Node(
-        package='combat_robot_nav2',
-        executable='can_reader.py',
-        name='can_reader',
-        output='screen',
-        parameters=[{'use_sim_time': use_sim_time}]
-    )
+    # 🌟 can_reader는 GUI(tkinter)라 launch에서 빼고 ssh -X로 따로 띄움.
+    # 로봇 화면(:0)에 떠서 점유 누적되는 문제 방지.
+    # 실행: ssh -X firefly@<robot> "source ... && python3 ~/combat_nav2/install/combat_robot_nav2/lib/combat_robot_nav2/can_reader.py --ros-args -r __node:=can_reader"
 
     # ==========================================
     # [Step 2] 2초 뒤 실행: 맵 서버 가동
@@ -91,7 +86,7 @@ def generate_launch_description():
         DeclareLaunchArgument('with_gnss', default_value='true'),
         rsp_node,
         localization_launch,
-        can_reader_node,  # <-- CAN 리더 추가
+        # can_reader_node 제외 — ssh -X로 별도 실행
         map_timer,
         nav_timer,
         mission_timer,     # <-- Mission Control 추가

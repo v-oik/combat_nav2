@@ -31,10 +31,10 @@ WHEEL_RADIUS_M = 0.07
 TRACK_WIDTH_M = 0.90
 TRACK_SLIP_FACTOR = 1.2
 
-CALIBRATION_SCALING = 35.714  
+CALIBRATION_SCALING = 35.714
 
-ENCODER_PPR = 1024         
-GEAR_RATIO = 30.0          
+ENCODER_PPR = 1024
+GEAR_RATIO = 30.0
 
 TICKS_PER_WHEEL_REV = ENCODER_PPR * GEAR_RATIO
 RAD_PER_TICK = ((2.0 * math.pi) / TICKS_PER_WHEEL_REV) * CALIBRATION_SCALING
@@ -42,14 +42,14 @@ RAD_PER_TICK = ((2.0 * math.pi) / TICKS_PER_WHEEL_REV) * CALIBRATION_SCALING
 CMD_CAN_ID = 0x201
 FEEDBACK_CAN_ID = 0x181
 
-CAN_SEND_FREQ_HZ = 30       
-INTER_MSG_GAP_SEC = 0.0005  
+CAN_SEND_FREQ_HZ = 30
+INTER_MSG_GAP_SEC = 0.0005
 
-DEAD_ZONE_STEER = 50        
-DEAD_ZONE_SPEED = 50        
+DEAD_ZONE_STEER = 50
+DEAD_ZONE_SPEED = 50
 
-MAX_STEER = 2000  
-MAX_SPEED = 5600  
+MAX_STEER = 2000
+MAX_SPEED = 5600
 
 # ==========================================
 # ROS 2 노드 클래스 (/odom 발행, /cmd_vel 수신)
@@ -58,32 +58,31 @@ class VehicleROSNode(Node):
     def __init__(self, ui_app):
         super().__init__('combat_ctrl_ros_node')
         self.ui_app = ui_app
-        
+
         self.odom_pub = self.create_publisher(Odometry, '/odom', 10)
         self.tf_broadcaster = TransformBroadcaster(self)
         self.cmd_sub = self.create_subscription(Twist, '/cmd_vel', self.cmd_vel_callback, 10)
-        
-        # 🔥 yaw 적분 제거 — EKF가 yaw 추정 담당
-        # 그래도 UI 표시용으로 누적치 보관 (orientation 발행에는 사용 안 함)
+
+        # 누적 odometry 상태 (EKF가 differential 모드로 delta만 사용)
         self.x = 0.0
         self.y = 0.0
-        self.th = 0.0   # UI 표시용만
+        self.th = 0.0
         self.last_time = self.get_clock().now()
 
     def cmd_vel_callback(self, msg):
         v_x = msg.linear.x
         v_yaw = msg.angular.z
-        
+
         left_v = v_x - (v_yaw * TRACK_WIDTH_M / 2.0)
         right_v = v_x + (v_yaw * TRACK_WIDTH_M / 2.0)
-        
+
         conv = RAD_PER_TICK * WHEEL_RADIUS_M
         left_line = left_v / conv
         right_line = right_v / conv
-        
+
         speed = (left_line + right_line) / 2.0
         steer = (right_line - left_line) / 2.0
-        
+
         self.ui_app.current_speed.set(max(-MAX_SPEED, min(MAX_SPEED, int(speed))))
         self.ui_app.current_steer.set(max(-MAX_STEER, min(MAX_STEER, int(steer))))
 
@@ -100,47 +99,60 @@ class VehicleROSNode(Node):
         ideal_v_yaw = (right_v - left_v) / TRACK_WIDTH_M
         v_yaw = ideal_v_yaw * TRACK_SLIP_FACTOR
 
-        # 🔥 UI 표시용 누적치 (EKF에 전달 안 됨)
+        # 누적 (UI + 발행 양쪽 사용)
         self.th += v_yaw * dt
         self.x += (v_x * math.cos(self.th)) * dt
         self.y += (v_x * math.sin(self.th)) * dt
 
-        # 🔥 Odometry 메시지 — orientation은 항상 identity (yaw 적분 제거)
-        # EKF는 v_x만 사용 (config에서 그렇게 설정)
+        # 🔥 Odometry 메시지 — 누적 position을 발행 (EKF는 differential 모드로 delta만 사용)
         odom_msg = Odometry()
         odom_msg.header.stamp = current_time.to_msg()
         odom_msg.header.frame_id = 'odom'
         odom_msg.child_frame_id = 'base_footprint'
 
-        # 🔥 position과 orientation을 모두 0 (EKF가 v_x만 보게)
-        odom_msg.pose.pose.position.x = 0.0
-        odom_msg.pose.pose.position.y = 0.0
+        # 누적 position 발행
+        odom_msg.pose.pose.position.x = float(self.x)
+        odom_msg.pose.pose.position.y = float(self.y)
         odom_msg.pose.pose.position.z = 0.0
+
+        # 누적 yaw도 quaternion으로 발행 (EKF는 differential이라 delta만 사용)
+        qz = math.sin(self.th / 2.0)
+        qw = math.cos(self.th / 2.0)
         odom_msg.pose.pose.orientation.x = 0.0
         odom_msg.pose.pose.orientation.y = 0.0
-        odom_msg.pose.pose.orientation.z = 0.0
-        odom_msg.pose.pose.orientation.w = 1.0
+        odom_msg.pose.pose.orientation.z = float(qz)
+        odom_msg.pose.pose.orientation.w = float(qw)
 
         odom_msg.twist.twist.linear.x = float(v_x)
         odom_msg.twist.twist.angular.z = float(v_yaw)
 
-        # 🔥 공분산: pose는 무한대(EKF가 쓰지 않게), twist는 신뢰도 표현
-        # EKF config에 따르면 v_x만 사용. v_x 공분산 = 0.05 (σ ≈ 0.22 m/s)
+        # 🔥 ZUPT: 양쪽 휠 모두 정지(deadband 0)면 v_x, v_yaw 분산을 매우 낮춰
+        # EKF가 "차량이 안 움직인다"는 사실을 강하게 신뢰 → IMU bias 적분으로 인한 yaw drift 차단
+        # 엔코더 jitter에 견고하게 — 계산 속도 기준. 정지(선속도·각속도 모두 미소)면 ZUPT,
+        # 제자리 회전(v_yaw 큼)은 정지 아님 → gyro로 회전 추적.
+        is_stationary = (abs(v_x) < 0.03 and abs(v_yaw) < 0.02)
+        if is_stationary:
+            twist_vx_var = 1e-4    # σ ≈ 0.01 m/s
+            twist_vyaw_var = 1e-9  # 정지: gyro cov보다 확실히 타이트 → 휠 vyaw=0이 gyro bias 이김
+        else:
+            twist_vx_var = 0.05    # σ ≈ 0.22 m/s
+            twist_vyaw_var = 0.5   # σ ≈ 0.7 rad/s (트랙 슬립)
+
         pose_cov = [
-            999.0, 0.0,   0.0,   0.0,   0.0,   0.0,
-            0.0,   999.0, 0.0,   0.0,   0.0,   0.0,
+            0.01,  0.0,   0.0,   0.0,   0.0,   0.0,    # x σ ≈ 0.1m
+            0.0,   0.01,  0.0,   0.0,   0.0,   0.0,    # y σ ≈ 0.1m
             0.0,   0.0,   999.0, 0.0,   0.0,   0.0,
             0.0,   0.0,   0.0,   999.0, 0.0,   0.0,
             0.0,   0.0,   0.0,   0.0,   999.0, 0.0,
-            0.0,   0.0,   0.0,   0.0,   0.0,   999.0,
+            0.0,   0.0,   0.0,   0.0,   0.0,   0.1,    # yaw σ ≈ 0.32 rad (트랙 슬립 고려)
         ]
         twist_cov = [
-            0.05,  0.0,   0.0,   0.0,   0.0,   0.0,    # v_x σ ≈ 0.22 m/s
-            0.0,   999.0, 0.0,   0.0,   0.0,   0.0,
-            0.0,   0.0,   999.0, 0.0,   0.0,   0.0,
-            0.0,   0.0,   0.0,   999.0, 0.0,   0.0,
-            0.0,   0.0,   0.0,   0.0,   999.0, 0.0,
-            0.0,   0.0,   0.0,   0.0,   0.0,   0.5,    # v_yaw σ ≈ 0.7 rad/s
+            twist_vx_var, 0.0, 0.0, 0.0, 0.0, 0.0,
+            0.0, 999.0, 0.0, 0.0, 0.0, 0.0,
+            0.0, 0.0,  999.0, 0.0, 0.0, 0.0,
+            0.0, 0.0,  0.0, 999.0, 0.0, 0.0,
+            0.0, 0.0,  0.0, 0.0, 999.0, 0.0,
+            0.0, 0.0,  0.0, 0.0, 0.0, twist_vyaw_var,
         ]
         odom_msg.pose.covariance = pose_cov
         odom_msg.twist.covariance = twist_cov
@@ -244,7 +256,7 @@ class VehicleControl:
 
         ctrl_frame = ttk.LabelFrame(frame, text="System Toggles")
         ctrl_frame.pack(fill=tk.X, pady=10, ipady=5)
-        
+
         ttk.Checkbutton(ctrl_frame, text="✅ Enable Control (Must be ON to move)", variable=self.control_enabled).pack(side=tk.LEFT, padx=10)
         ttk.Checkbutton(ctrl_frame, text="Headlights", variable=self.laser_enabled).pack(side=tk.LEFT, padx=10)
 
@@ -279,16 +291,16 @@ class VehicleControl:
     def process_ui_queue(self):
         while not self.ui_queue.empty():
             msg_type, data = self.ui_queue.get()
-            
+
             if msg_type == "rx":
                 if data.arbitration_id == FEEDBACK_CAN_ID and len(data.data) >= 4:
                     left_act, right_act = struct.unpack("<hh", data.data[0:4])
-                    
+
                     if abs(left_act) < 5: left_act = 0
                     if abs(right_act) < 5: right_act = 0
 
                     self.ros_node.publish_odom(left_act, right_act)
-                    
+
                     odom_info = f"X: {self.ros_node.x:.2f}m | Y: {self.ros_node.y:.2f}m | Yaw: {math.degrees(self.ros_node.th):.1f}°"
                     self.status_label.config(text=f"Motor L: {left_act}, R: {right_act}  ||  {odom_info}")
 
@@ -310,7 +322,7 @@ class VehicleControl:
             alpha = 0.3
             self.filterd_steer = (1 - alpha) * self.filterd_steer + alpha * steer
             self.filterd_speed = (1 - alpha) * self.filterd_speed + alpha * speed
-            
+
             left_wheel = max(-MAX_SPEED, min(MAX_SPEED, int(self.filterd_speed + self.filterd_steer)))
             right_wheel = max(-MAX_SPEED, min(MAX_SPEED, int(self.filterd_speed - self.filterd_steer)))
             start_stop = 0x01
@@ -327,11 +339,11 @@ class VehicleControl:
         print("Shutting down...")
         try: self.tx_queue.put_nowait((CMD_CAN_ID, struct.pack("<hhBBBB", 0, 0, 0x01, 0x00, 0x00, 0x05)))
         except queue.Full: pass
-            
+
         self.stop_event.set()
         self.tx_worker.join(timeout=1.0)
         self.rx_worker.join(timeout=1.0)
-        
+
         rclpy.shutdown()
         self.ros_thread.join(timeout=1.0)
 
