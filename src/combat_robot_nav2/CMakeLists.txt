@@ -16,6 +16,9 @@ find_package(geometry_msgs REQUIRED)
 find_package(combat_robot_msgs REQUIRED)
 find_package(robot_localization REQUIRED)
 find_package(geographic_msgs REQUIRED)
+find_package(sensor_msgs REQUIRED)
+find_package(std_msgs REQUIRED)
+find_package(nav_msgs REQUIRED)
 
 # 3. C++ 소스 코드 컴파일 (src/mission_control_node.cpp를 빌드)
 add_executable(mission_control_node src/mission_control_node.cpp)
@@ -29,6 +32,9 @@ ament_target_dependencies(mission_control_node
   combat_robot_msgs
   robot_localization
   geographic_msgs
+  sensor_msgs
+  std_msgs
+  nav_msgs
 )
 
 # 5. 빌드된 실행 파일 설치 (ros2 run으로 실행할 수 있도록 lib 경로에 설치)

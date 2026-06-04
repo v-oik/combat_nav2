@@ -21,6 +21,9 @@
 
   <!-- 3. 우리가 만든 커스텀 메시지 패키지 (필수!) -->
   <depend>combat_robot_msgs</depend>
+  <depend>sensor_msgs</depend>
+  <depend>std_msgs</depend>
+  <depend>nav_msgs</depend>
 
   <test_depend>ament_lint_auto</test_depend>
   <test_depend>ament_lint_common</test_depend>
