@@ -49,6 +49,7 @@ install(DIRECTORY
   config
   map
   world
+  include
   DESTINATION share/${PROJECT_NAME}
 )
 
