@@ -167,8 +167,9 @@ class CanBusWrapper:
         self.bus = None
         if can is not None:
             try:
-                self.bus = can.interface.Bus(interface='pcan', channel='PCAN_USBBUS1', bitrate=250000)
-                print("✅ PCAN Bus Initialized (PCAN_USBBUS1, 250kbps)")
+                # 보드 내장 SocketCAN(can0). 비트레이트는 OS에서 `ip link`로 설정(250kbps).
+                self.bus = can.interface.Bus(interface='socketcan', channel='can0')
+                print("✅ SocketCAN Bus Initialized (can0, 250kbps)")
             except Exception as e:
                 print("❌ CAN init error:", e)
 
@@ -218,7 +219,7 @@ class VehicleControl:
         self.current_steer = tk.IntVar(value=0)
         self.current_speed = tk.IntVar(value=0)
         self.control_enabled = tk.BooleanVar(value=False)
-        self.laser_enabled = tk.BooleanVar(value=False)
+        self.headlight_mode = tk.IntVar(value=2)  # 1, 2, 3 중 선택 (기본 2)
 
         self.filterd_steer, self.filterd_speed = 0.0, 0.0
 
@@ -245,7 +246,7 @@ class VehicleControl:
         self.tx_worker.start()
         self.rx_worker.start()
 
-        self.status_label.config(text="CAN: connected (PCAN 250k)" if self.can.bus else "CAN: interface down.")
+        self.status_label.config(text="CAN: connected (socketcan can0 250k)" if self.can.bus else "CAN: interface down.")
 
         self.process_ui_queue()
         self.push_tx_loop()
@@ -258,7 +259,9 @@ class VehicleControl:
         ctrl_frame.pack(fill=tk.X, pady=10, ipady=5)
 
         ttk.Checkbutton(ctrl_frame, text="✅ Enable Control (Must be ON to move)", variable=self.control_enabled).pack(side=tk.LEFT, padx=10)
-        ttk.Checkbutton(ctrl_frame, text="Headlights", variable=self.laser_enabled).pack(side=tk.LEFT, padx=10)
+        ttk.Label(ctrl_frame, text="Headlights:").pack(side=tk.LEFT, padx=(15, 2))
+        for v in (1, 2, 3):
+            ttk.Radiobutton(ctrl_frame, text=str(v), value=v, variable=self.headlight_mode).pack(side=tk.LEFT, padx=2)
 
         slider_frame = ttk.LabelFrame(frame, text="Speed & Steering Targets (cmd_vel / Manual)")
         slider_frame.pack(fill=tk.BOTH, expand=True, pady=10)
@@ -327,7 +330,7 @@ class VehicleControl:
             right_wheel = max(-MAX_SPEED, min(MAX_SPEED, int(self.filterd_speed - self.filterd_steer)))
             start_stop = 0x01
 
-        light_ctrl = 0x03 if self.laser_enabled.get() else 0x02
+        light_ctrl = self.headlight_mode.get() & 0xFF  # 1, 2, 3 중 선택값
         payload = struct.pack("<hhBBBB", right_wheel, left_wheel, light_ctrl, 0x00, start_stop, 0x05)
 
         try: self.tx_queue.put_nowait((CMD_CAN_ID, payload))
